@@ -42,6 +42,9 @@
 					"examples",
 					"tests"
 				],
+				"python.analysis.extraPaths": [
+					"lib/surface_potential_analysis"
+				],
 				"cSpell.allowCompoundWords": true,
 				"cSpell.flagWords": [
 					"hte",
@@ -59,7 +62,12 @@
 					"Preal",
 					"fftfreq",
 					"fftshift",
-					"arange"
+					"arange",
+					"eigenstates",
+					"langevin",
+					"wavefunctions",
+					"diagonalization",
+					"Caldeira"
 				]
 			},
 			"extensions": [
@@ -71,5 +79,6 @@
 				"ms-python.vscode-pylance"
 			]
 		}
-	}
+	},
+	"onCreateCommand": "rustup default nightly && pip install maturin && poetry install"
 }
