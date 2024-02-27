@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any, Literal, TypeVar
 import numpy as np
 from scipy.constants import electron_volt
 from surface_potential_analysis.basis.basis import (
-    FundamentalBasis,
     FundamentalTransformedPositionBasis,
     FundamentalTransformedPositionBasis1d,
     TransformedPositionBasis1d,
@@ -27,18 +26,12 @@ from surface_potential_analysis.potential.conversion import convert_potential_to
 from surface_potential_analysis.stacked_basis.conversion import (
     stacked_basis_as_fundamental_momentum_basis,
 )
-from surface_potential_analysis.state_vector.eigenstate_calculation import (
-    calculate_eigenvectors_hermitian,
-)
 
 from localized_sse.calderia_leggett import get_noise_operator as get_noise_operator_cl
 
 if TYPE_CHECKING:
     from surface_potential_analysis.operator.operator import SingleBasisOperator
     from surface_potential_analysis.potential.potential import Potential
-    from surface_potential_analysis.state_vector.eigenstate_collection import (
-        EigenstateList,
-    )
 
 _L0Inv = TypeVar("_L0Inv", bound=int)
 _L1Inv = TypeVar("_L1Inv", bound=int)
@@ -120,26 +113,8 @@ def get_hamiltonian(
     return total_surface_hamiltonian(converted, SODIUM_MASS, np.array([0]))
 
 
-def get_system_eigenstates(
-    shape: tuple[_L0Inv],
-    resolution: tuple[_L0Inv],
-    *,
-    subset_by_index: tuple[int, int] | None = None,
-) -> EigenstateList[
-    FundamentalBasis[int],
-    StackedBasisLike[FundamentalTransformedPositionBasis[int, Literal[1]]],
-]:
-    h = get_hamiltonian(shape, resolution)
-    return calculate_eigenvectors_hermitian(h, subset_by_index)
-
-
 def get_noise_operator(
     basis: _B0Inv,
     temperature: float,
 ) -> SingleBasisOperator[_B0Inv]:
-    return get_noise_operator_cl(
-        basis,
-        SODIUM_MASS,
-        temperature,
-        SODIUM_GAMMA,
-    )
+    return get_noise_operator_cl(basis, SODIUM_MASS, temperature, SODIUM_GAMMA)
