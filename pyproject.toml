@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "localized_sse"
+name = "caldeira_legget_examples"
 version = "0.1.0"
 description = ""
 authors = ["Matthew Ord <matthew.ord1@gmail.com>"]

@@ -12,7 +12,6 @@ from surface_potential_analysis.dynamics.schrodinger.solve import (
 )
 from surface_potential_analysis.dynamics.stochastic_schrodinger.solve import (
     solve_stochastic_schrodinger_equation,
-    solve_stochastic_schrodinger_equation_localized,
 )
 from surface_potential_analysis.stacked_basis.conversion import (
     stacked_basis_as_fundamental_position_basis,
@@ -97,7 +96,7 @@ def get_coherent_evolution_decomposition() -> (
 
 
 @npy_cached_dict(
-    Path("examples/data/harmonic/stochastic.256000.1.npz"),
+    Path("examples/data/harmonic/stochastic.256000.3.npz"),
     load_pickle=True,
 )
 def get_stochastic_evolution() -> (
@@ -109,35 +108,12 @@ def get_stochastic_evolution() -> (
         StackedBasisLike[FundamentalTransformedPositionBasis[int, Literal[1]]],
     ]
 ):
-    hamiltonian = get_hamiltonian(100)
+    hamiltonian = get_hamiltonian(200)
     initial_state = get_initial_state(hamiltonian["basis"][0])
-    times = EvenlySpacedTimeBasis(80, 256000, 0, 160e-35)
+    times = EvenlySpacedTimeBasis(320, 256000, 0, 160e-35)
     noise = get_noise_operator(hamiltonian["basis"][0], 100 / Boltzmann)
 
     return solve_stochastic_schrodinger_equation(
-        initial_state,
-        times,
-        hamiltonian,
-        [noise],
-    )
-
-
-@npy_cached_dict(Path("examples/data/stochastic_localized.npz"), load_pickle=True)
-def get_stochastic_evolution_localized() -> (
-    StateVectorList[
-        StackedBasisLike[
-            FundamentalBasis[Literal[1]],
-            EvenlySpacedTimeBasis[int, int, int],
-        ],
-        StackedBasisLike[FundamentalTransformedPositionBasis[int, Literal[1]]],
-    ]
-):
-    hamiltonian = get_hamiltonian((6,), (100,))
-    initial_state = get_initial_state(hamiltonian["basis"][0])
-    times = EvenlySpacedTimeBasis(20, 10000, 0, 2e-12)
-    noise = get_noise_operator(hamiltonian["basis"][0], 155)
-
-    return solve_stochastic_schrodinger_equation_localized(
         initial_state,
         times,
         hamiltonian,

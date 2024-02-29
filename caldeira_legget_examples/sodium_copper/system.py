@@ -27,7 +27,7 @@ from surface_potential_analysis.stacked_basis.conversion import (
     stacked_basis_as_fundamental_momentum_basis,
 )
 
-from localized_sse.calderia_leggett import get_noise_operator as get_noise_operator_cl
+from caldeira_legget_examples.util import get_noise_operator as get_noise_operator_cl
 
 if TYPE_CHECKING:
     from surface_potential_analysis.operator.operator import SingleBasisOperator
@@ -95,6 +95,9 @@ def get_extended_interpolated_potential(
         ),
     )
     scaled_potential = interpolated["data"] * np.sqrt(basis.fundamental_n / old.n)
+    if shape[0] % 2 == 1:
+        # Place a minima at the center
+        scaled_potential *= np.exp(1j * np.pi)
 
     return {"basis": basis, "data": scaled_potential}
 

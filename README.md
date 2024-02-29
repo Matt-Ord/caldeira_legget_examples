@@ -1,3 +1,3 @@
-# Localized SSE
+# Caldera Leggett Model
 
-Exploration into a Localized Stochastic Schrodinger Equation
+Exploration into the Caldera Leggett Model.

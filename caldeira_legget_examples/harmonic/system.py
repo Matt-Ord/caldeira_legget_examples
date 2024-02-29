@@ -18,7 +18,7 @@ from surface_potential_analysis.hamiltonian_builder.momentum_basis import (
     total_surface_hamiltonian,
 )
 
-from localized_sse.calderia_leggett import get_noise_operator as get_noise_operator_cl
+from caldeira_legget_examples.util import get_noise_operator as get_noise_operator_cl
 
 if TYPE_CHECKING:
     from surface_potential_analysis.basis.basis_like import (

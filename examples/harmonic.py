@@ -1,4 +1,4 @@
-from localized_sse.harmonic.plot import (
+from caldeira_legget_examples.harmonic.plot import (
     plot_coherent_evolution,
     plot_stochastic_evolution,
     plot_stochastic_occupation,
