@@ -1,3 +1,4 @@
+from surface_potential_analysis.operator.plot import plot_operator_sparsity
 from surface_potential_analysis.potential.plot import plot_potential_1d_x
 from surface_potential_analysis.state_vector.eigenstate_calculation import (
     calculate_eigenvectors_hermitian,
@@ -133,4 +134,11 @@ def plot_stochastic_occupation() -> None:
 
     fig0.show()
     fig1.show()
+    input()
+
+
+def plot_hamiltonian_sparsity() -> None:
+    hamiltonian = get_hamiltonian((8,), (81,))
+    fig, _ = plot_operator_sparsity(hamiltonian)
+    fig.show()
     input()

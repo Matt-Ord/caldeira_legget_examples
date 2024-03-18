@@ -37,14 +37,25 @@
 				},
 				"python.analysis.diagnosticMode": "workspace",
 				"python.analysis.typeCheckingMode": "strict",
+				"python.testing.unittestArgs": [
+					"-v",
+					"-s",
+					"./lib/surface_potential_analysis/tests",
+					"-p",
+					"*_test.py"
+				],
+				"python.testing.pytestEnabled": false,
+				"python.testing.unittestEnabled": true,
 				"python.analysis.include": [
-					"isf_analysis",
+					"caldeira_legget_examples",
 					"examples",
-					"tests"
+					"tests",
+					"lib/surface_potential_analysis/surface_potential_analysis"
 				],
 				"python.analysis.extraPaths": [
 					"lib/surface_potential_analysis"
 				],
+				"python.analysis.autoImportCompletions": true,
 				"cSpell.allowCompoundWords": true,
 				"cSpell.flagWords": [
 					"hte",
@@ -64,10 +75,12 @@
 					"fftshift",
 					"arange",
 					"eigenstates",
+					"eigenstate",
 					"langevin",
 					"wavefunctions",
 					"diagonalization",
-					"Caldeira"
+					"Caldeira",
+					"hbar"
 				]
 			},
 			"extensions": [

@@ -1,13 +1,14 @@
 [tool.poetry]
-name = "caldeira_legget_examples"
+name = "caldeira-legget-examples"
 version = "0.1.0"
 description = ""
 authors = ["Matthew Ord <matthew.ord1@gmail.com>"]
 readme = "README.md"
+packages = [{ include = "caldeira_legget_examples" }]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.13"
-surface_potential_analysis = { path = "lib/surface_potential_analysis", develop = true }
+surface-potential-analysis = { path = "lib/surface_potential_analysis", develop = true }
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.2.2"
