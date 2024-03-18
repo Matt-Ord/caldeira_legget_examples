@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 import numpy as np
 from scipy.constants import Boltzmann, hbar
 from surface_potential_analysis.basis.time_basis_like import EvenlySpacedTimeBasis
+from surface_potential_analysis.basis.util import BasisUtil
 from surface_potential_analysis.dynamics.schrodinger.solve import (
     solve_schrodinger_equation,
     solve_schrodinger_equation_decomposition,
@@ -30,7 +30,6 @@ from surface_potential_analysis.state_vector.conversion import (
 from surface_potential_analysis.state_vector.state_vector_list import (
     StateVectorList,
 )
-from surface_potential_analysis.util.decorators import npy_cached_dict
 
 from .system import (
     get_hamiltonian,
@@ -61,7 +60,11 @@ if TYPE_CHECKING:
 
 def get_initial_state(basis: _B0Inv) -> StateVector[_B0Inv]:
     data = np.zeros(basis.fundamental_n, dtype=np.complex128)
-    data[basis.fundamental_n // 2] = 1
+    util = BasisUtil(basis)
+    middle = util.fundamental_n // 2
+    data = np.exp(-((util.fundamental_nx_points - middle) ** 2) / 4)
+    data /= np.sqrt(np.sum(np.abs(data) ** 2))
+
     return convert_state_vector_to_basis(
         {
             "basis": stacked_basis_as_fundamental_position_basis(basis),
@@ -126,10 +129,10 @@ def get_stochastic_evolution() -> (
     )
 
 
-@npy_cached_dict(
-    Path("examples/data/free_particle/stochastic.5.npz"),
-    load_pickle=True,
-)
+# @npy_cached_dict(
+#     Path("examples/data/free_particle/stochastic.10.npz"),
+#     load_pickle=True,
+# )
 def get_stochastic_evolution_high_t() -> (
     StateVectorList[
         StackedBasisLike[
@@ -139,15 +142,15 @@ def get_stochastic_evolution_high_t() -> (
         StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],
     ]
 ):
-    hamiltonian = get_hamiltonian(21)
+    hamiltonian = get_hamiltonian(31)
     initial_state = get_initial_state(hamiltonian["basis"][0])
-    times = EvenlySpacedTimeBasis(1000, 20, 0, hbar * 0.05)
-    kernel = get_potential_noise_kernel(21, 10 / Boltzmann)
+    times = EvenlySpacedTimeBasis(2, 20, 0, hbar * 0.005)
+    kernel = get_potential_noise_kernel(31, 10 / Boltzmann)
     operators = get_single_factorized_noise_operators_diagonal(kernel)
     operator_list = list[SingleBasisOperator[Any]]()
-    args = np.argsort(np.abs(operators["eigenvalue"]))
-    print(operators["eigenvalue"][args])
-    for idx in args:
+    args = np.argsort(np.abs(operators["eigenvalue"]))[::-1]
+
+    for idx in args[:6]:
         operator = select_operator(
             as_operator_list(operators),
             idx=idx,

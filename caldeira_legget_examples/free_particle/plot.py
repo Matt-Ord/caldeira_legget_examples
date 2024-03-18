@@ -1,5 +1,6 @@
 from matplotlib import pyplot as plt
 from surface_potential_analysis.state_vector.plot import (
+    animate_state_over_list_1d_k,
     animate_state_over_list_1d_x,
     plot_state_1d_x,
 )
@@ -73,6 +74,10 @@ def plot_stochastic_evolution_high_t() -> None:
 
     fig, ax, _anim1 = animate_state_over_list_1d_x(states, measure="real")
     _, _, _anim2 = animate_state_over_list_1d_x(states, measure="imag", ax=ax)
+    fig.show()
+
+    fig, ax, _anim3 = animate_state_over_list_1d_k(states, measure="real")
+    _, _, _anim4 = animate_state_over_list_1d_k(states, measure="imag", ax=ax)
     fig.show()
 
     input()

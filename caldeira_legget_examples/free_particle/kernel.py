@@ -28,8 +28,6 @@ from surface_potential_analysis.state_vector.plot import (
     plot_state_1d_x,
 )
 
-from caldeira_legget_examples.free_particle.dynamics import get_initial_state
-
 from .system import get_full_noise_kernel, get_hamiltonian, get_potential_noise_kernel
 
 
@@ -42,7 +40,7 @@ def plot_noise_kernel() -> None:
 
 def plot_truncated_noise_kernel() -> None:
     kernel = get_potential_noise_kernel(21, 10 / Boltzmann)
-    truncated = truncate_diagonal_noise_kernel(kernel, n=8)
+    truncated = truncate_diagonal_noise_kernel(kernel, n=6)
     fig, _, _ = plot_diagonal_kernel(truncated)
     fig.show()
 
@@ -64,17 +62,29 @@ def plot_potential_noise_kernel_largest_operator() -> None:
     kernel = get_potential_noise_kernel(21, 10 / Boltzmann)
     operators = get_single_factorized_noise_operators_diagonal(kernel)
 
-    operator = select_operator_diagonal(
-        operators,
-        idx=np.argmax(np.abs(operators["eigenvalue"])),
-    )
-    state = apply_operator_to_state(
-        as_operator(operator),
-        get_initial_state(operator["basis"][1]),
-    )
+    initial_state = {
+        "basis": operators["basis"][1][1],
+        "data": np.zeros(operators["basis"][1][1].n),
+    }
 
-    fig, _, _ = plot_state_1d_x(state, measure="real")
-    fig.show()
+    initial_state["data"][:] = 1 / np.sqrt(initial_state["basis"].fundamental_n)
+    for idx in range(6):
+        operator = select_operator_diagonal(
+            operators,
+            idx=np.argsort(np.abs(operators["eigenvalue"]))[idx],
+        )
+        state = apply_operator_to_state(
+            as_operator(operator),
+            initial_state,
+        )
+
+        fig, ax, _ = plot_state_1d_x(state, measure="abs")
+        _, _, _ = plot_state_1d_x(state, measure="real", ax=ax)
+        _, _, _ = plot_state_1d_x(state, measure="imag", ax=ax)
+        ax.legend()
+
+        ax.set_title(f"{idx}, E={np.sort(np.abs(operators['eigenvalue']))[idx]}")
+        fig.show()
     input()
 
 
