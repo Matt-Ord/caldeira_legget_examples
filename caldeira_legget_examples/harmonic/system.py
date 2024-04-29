@@ -18,7 +18,7 @@ from surface_potential_analysis.hamiltonian_builder.momentum_basis import (
     total_surface_hamiltonian,
 )
 
-from caldeira_legget_examples.util import get_noise_operator as get_noise_operator_cl
+from caldeira_legget_examples.util import get_caldeira_leggett_noise_operator
 
 if TYPE_CHECKING:
     from surface_potential_analysis.basis.basis_like import (
@@ -67,4 +67,9 @@ def get_noise_operator(
     basis: _B0Inv,
     temperature: float,
 ) -> SingleBasisOperator[_B0Inv]:
-    return get_noise_operator_cl(basis, ATOM_MASS, temperature, ATOM_GAMMA)
+    return get_caldeira_leggett_noise_operator(
+        basis,
+        ATOM_MASS,
+        temperature,
+        ATOM_GAMMA,
+    )

@@ -1,18 +1,23 @@
 from matplotlib import pyplot as plt
+from scipy.constants import Boltzmann
+from surface_potential_analysis.operator.plot import plot_eigenstate_occupations
 from surface_potential_analysis.state_vector.plot import (
+    animate_all_band_occupations,
     animate_state_over_list_1d_k,
     animate_state_over_list_1d_x,
+    plot_all_band_occupations,
     plot_state_1d_x,
 )
 from surface_potential_analysis.state_vector.state_vector_list import (
     state_vector_list_into_iter,
 )
 
+from caldeira_legget_examples.free_particle.system import get_hamiltonian
+
 from .dynamics import (
     get_coherent_evolution,
     get_coherent_evolution_decomposition,
     get_stochastic_evolution,
-    get_stochastic_evolution_high_t,
 )
 
 
@@ -58,26 +63,27 @@ def plot_stochastic_evolution() -> None:
     fig, _, _anim0 = animate_state_over_list_1d_x(states)
     fig.show()
 
+    fig, ax, _anim3 = animate_state_over_list_1d_k(states)
+    fig.show()
+
     input()
 
 
-def plot_stochastic_evolution_high_t() -> None:
-    states = get_stochastic_evolution_high_t()
+def plot_stochastic_occupation() -> None:
+    states = get_stochastic_evolution()
 
-    fig, ax = plt.subplots()
-    for state in state_vector_list_into_iter(states):
-        plot_state_1d_x(state, ax=ax)
-    fig.show()
+    hamiltonian = get_hamiltonian(31)
+    fig0, ax0 = plot_all_band_occupations(hamiltonian, states)
 
-    fig, _, _anim0 = animate_state_over_list_1d_x(states)
-    fig.show()
+    fig1, ax1, _anim0 = animate_all_band_occupations(hamiltonian, states)
 
-    fig, ax, _anim1 = animate_state_over_list_1d_x(states, measure="real")
-    _, _, _anim2 = animate_state_over_list_1d_x(states, measure="imag", ax=ax)
-    fig.show()
+    for ax in [ax0, ax1]:
+        _, _, line = plot_eigenstate_occupations(hamiltonian, 3 / Boltzmann, ax=ax)
+        line.set_linestyle("--")
+        line.set_label("Expected")
 
-    fig, ax, _anim3 = animate_state_over_list_1d_k(states, measure="real")
-    _, _, _anim4 = animate_state_over_list_1d_k(states, measure="imag", ax=ax)
-    fig.show()
+        ax.legend([line], ["Expected occupation"])
 
+    fig0.show()
+    fig1.show()
     input()

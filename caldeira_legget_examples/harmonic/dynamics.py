@@ -32,7 +32,7 @@ from .system import (
 if TYPE_CHECKING:
     from surface_potential_analysis.basis.basis import (
         FundamentalBasis,
-        FundamentalTransformedPositionBasis,
+        FundamentalPositionBasis,
     )
     from surface_potential_analysis.basis.basis_like import BasisWithLengthLike
     from surface_potential_analysis.basis.stacked_basis import (
@@ -69,7 +69,7 @@ def get_coherent_evolution() -> (
             FundamentalBasis[Literal[1]],
             EvenlySpacedTimeBasis[int, int, int],
         ],
-        StackedBasisLike[FundamentalTransformedPositionBasis[int, Literal[1]]],
+        StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],
     ]
 ):
     hamiltonian = get_hamiltonian(100)
@@ -85,7 +85,7 @@ def get_coherent_evolution_decomposition() -> (
             FundamentalBasis[Literal[1]],
             EvenlySpacedTimeBasis[int, int, int],
         ],
-        StackedBasisLike[FundamentalTransformedPositionBasis[int, Literal[1]]],
+        StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],
     ]
 ):
     hamiltonian = get_hamiltonian(100)
@@ -105,7 +105,7 @@ def get_stochastic_evolution() -> (
             FundamentalBasis[Literal[1]],
             EvenlySpacedTimeBasis[int, int, int],
         ],
-        StackedBasisLike[FundamentalTransformedPositionBasis[int, Literal[1]]],
+        StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],
     ]
 ):
     hamiltonian = get_hamiltonian(200)

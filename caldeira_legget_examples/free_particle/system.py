@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Literal, TypeVar
 import numpy as np
 from scipy.constants import hbar
 from surface_potential_analysis.basis.basis import (
+    FundamentalBasis,
     FundamentalPositionBasis,
 )
 from surface_potential_analysis.basis.stacked_basis import (
@@ -14,13 +15,10 @@ from surface_potential_analysis.basis.stacked_basis import (
 from surface_potential_analysis.hamiltonian_builder.momentum_basis import (
     total_surface_hamiltonian,
 )
-from surface_potential_analysis.kernel.kernel import (
-    get_single_factorized_noise_operators,
-)
 from surface_potential_analysis.operator.operator_list import select_operator
 
 from caldeira_legget_examples.util import (
-    get_full_noise_kernel as get_full_noise_kernel_generic,
+    get_noise_operators as get_noise_operators_generic,
 )
 from caldeira_legget_examples.util import (
     get_potential_noise_kernel as get_potential_noise_kernel_generic,
@@ -29,7 +27,7 @@ from caldeira_legget_examples.util import (
 if TYPE_CHECKING:
     from surface_potential_analysis.kernel.kernel import (
         SingleBasisDiagonalNoiseKernel,
-        SingleBasisNoiseKernel,
+        SingleBasisNoiseOperatorList,
     )
     from surface_potential_analysis.operator.operator import SingleBasisOperator
     from surface_potential_analysis.potential.potential import Potential
@@ -38,7 +36,7 @@ if TYPE_CHECKING:
 
 
 ATOM_MASS = (10 * hbar) ** 2
-ATOM_GAMMA = 1 / 300
+ATOM_GAMMA = 1 / 120
 
 
 def get_potential(
@@ -74,14 +72,15 @@ def get_potential_noise_kernel(
     )
 
 
-def get_full_noise_kernel(
+def get_noise_operators(
     size: _L0Inv,
     temperature: float,
-) -> SingleBasisNoiseKernel[
-    StackedBasisLike[FundamentalPositionBasis[_L0Inv, Literal[1]]]
+) -> SingleBasisNoiseOperatorList[
+    FundamentalBasis[int],
+    StackedBasisLike[FundamentalPositionBasis[_L0Inv, Literal[1]]],
 ]:
     hamiltonian = get_hamiltonian(size)
-    return get_full_noise_kernel_generic(
+    return get_noise_operators_generic(
         hamiltonian,
         ATOM_MASS,
         temperature,
@@ -95,8 +94,8 @@ def get_most_significant_noise_operator(
 ) -> SingleBasisOperator[
     StackedBasisLike[FundamentalPositionBasis[_L0Inv, Literal[1]]]
 ]:
-    kernel = get_full_noise_kernel(size, temperature)
-    operators = get_single_factorized_noise_operators(kernel)
+    operators = get_noise_operators(size, temperature)
+
     idx = np.argmax(np.abs(operators["eigenvalue"]))
     operator = select_operator(
         operators,

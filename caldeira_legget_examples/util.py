@@ -5,7 +5,11 @@ from typing import TYPE_CHECKING, Any, Literal, TypeVar
 import numpy as np
 from scipy.constants import Boltzmann, hbar
 from surface_potential_analysis.basis.basis_like import (
+    BasisLike,
     BasisWithLengthLike,
+)
+from surface_potential_analysis.basis.conversion import (
+    basis_as_fundamental_position_basis,
 )
 from surface_potential_analysis.basis.stacked_basis import (
     StackedBasis,
@@ -13,22 +17,21 @@ from surface_potential_analysis.basis.stacked_basis import (
 )
 from surface_potential_analysis.basis.util import BasisUtil
 from surface_potential_analysis.kernel.kernel import (
-    get_noise_kernel,
     get_single_factorized_noise_operators_diagonal,
 )
 from surface_potential_analysis.operator.conversion import (
-    convert_operator_list_to_basis,
     convert_operator_to_basis,
 )
 from surface_potential_analysis.operator.operator import (
     add_operator,
-    apply_function_to_operator,
     as_operator,
 )
 from surface_potential_analysis.operator.operator_list import (
+    SingleBasisOperatorList,
+    add_list_list,
     as_operator_list,
-    matmul_list_operator,
-    matmul_operator_list,
+    get_commutator_operator_list,
+    scale_operator_list,
 )
 from surface_potential_analysis.stacked_basis.conversion import (
     stacked_basis_as_fundamental_momentum_basis,
@@ -36,25 +39,61 @@ from surface_potential_analysis.stacked_basis.conversion import (
 )
 
 if TYPE_CHECKING:
-    from surface_potential_analysis.basis.basis import FundamentalPositionBasis
+    from surface_potential_analysis.basis.basis import (
+        FundamentalBasis,
+        FundamentalPositionBasis,
+    )
     from surface_potential_analysis.kernel.kernel import (
         SingleBasisDiagonalNoiseKernel,
-        SingleBasisNoiseKernel,
+        SingleBasisDiagonalNoiseOperatorList,
+        SingleBasisNoiseOperatorList,
     )
     from surface_potential_analysis.operator.operator import SingleBasisOperator
 
-_B0Inv = TypeVar(
-    "_B0Inv",
+_SB0 = TypeVar(
+    "_SB0",
     bound=StackedBasisLike[BasisWithLengthLike[Any, Any, Literal[1]]],
+)
+_B1 = TypeVar(
+    "_B1",
+    bound=BasisLike[Any, Any],
+)
+
+_B0 = TypeVar(
+    "_B0",
+    bound=BasisLike[Any, Any],
 )
 
 
-def get_noise_operator(
-    basis: _B0Inv,
+_BL0 = TypeVar(
+    "_BL0",
+    bound=BasisWithLengthLike[Any, Any, Literal[1]],
+)
+
+
+def get_caldeira_leggett_noise_operator(
+    basis: _SB0,
     mass: float,
     temperature: float,
     gamma: float,
-) -> SingleBasisOperator[_B0Inv]:
+) -> SingleBasisOperator[_SB0]:
+    r"""Get the Caldeira Leggett Noise operator.
+
+    \hat{A} = \sqrt{\gamma}(\sqrt{4 m kT} \hat{x} + i\sqrt{1/{4mkT}} \hat{p})
+
+    Parameters
+    ----------
+    basis : _SB0
+    mass : float
+    temperature : float
+    gamma : float
+
+    Returns
+    -------
+    SingleBasisOperator[_SB0]
+        _description_
+
+    """
     basis_x = stacked_basis_as_fundamental_position_basis(basis)
     mu = np.sqrt(4 * mass * Boltzmann * temperature / hbar**2)
     x_noise = convert_operator_to_basis(
@@ -105,7 +144,7 @@ def get_potential_noise_kernel(
     mu = np.sqrt(4 * mass * Boltzmann * temperature / hbar**2)
     beta = mu**2 * gamma / 2
 
-    basis_x = stacked_basis_as_fundamental_position_basis(basis)
+    basis_x = StackedBasis(basis_as_fundamental_position_basis(basis[0]))
 
     util = BasisUtil(basis_x[0])
     n_x_points = util.nx_points
@@ -121,47 +160,89 @@ def get_potential_noise_kernel(
     }
 
 
-def get_full_noise_kernel(
+def get_temperature_corrected_operators(
+    hamiltonian: SingleBasisOperator[_B1],
+    operators: SingleBasisOperatorList[
+        _B0,
+        _B1,
+    ],
+    temperature: float,
+) -> SingleBasisOperatorList[
+    _B0,
+    _B1,
+]:
+    commutator = get_commutator_operator_list(hamiltonian, operators)
+    correction = scale_operator_list(1j / (4 * Boltzmann * temperature), commutator)
+    return add_list_list(operators, correction)
+
+
+def get_temperature_corrected_noise_operators(
+    hamiltonian: SingleBasisOperator[_B1],
+    operators: SingleBasisDiagonalNoiseOperatorList[
+        _B0,
+        _B1,
+    ],
+    temperature: float,
+) -> SingleBasisNoiseOperatorList[
+    _B0,
+    _B1,
+]:
+    operators_full = as_operator_list(operators)
+    corrected_operators = get_temperature_corrected_operators(
+        hamiltonian,
+        operators_full,
+        temperature,
+    )
+
+    return {
+        "basis": corrected_operators["basis"],
+        "data": corrected_operators["data"],
+        "eigenvalue": operators["eigenvalue"],
+    }
+
+
+def get_noise_operators(
     hamiltonian: SingleBasisOperator[
         StackedBasisLike[BasisWithLengthLike[Any, Any, Literal[1]]]
     ],
     mass: float,
     temperature: float,
     gamma: float,
-) -> SingleBasisNoiseKernel[
-    StackedBasisLike[BasisWithLengthLike[Any, Any, Literal[1]]]
+) -> SingleBasisNoiseOperatorList[
+    FundamentalBasis[int],
+    StackedBasisLike[FundamentalPositionBasis[Any, Literal[1]]],
 ]:
-    potential_kernel = get_potential_noise_kernel(
+    """Get the noise operators for a gausssian kernel in the given basis.
+
+    Parameters
+    ----------
+    hamiltonian : SingleBasisOperator[_BL0]
+    mass : float
+    temperature : float
+    gamma : float
+
+    Returns
+    -------
+    SingleBasisNoiseOperatorList[
+        FundamentalBasis[int],
+        FundamentalPositionBasis[Any, Literal[1]],
+    ]
+
+    """
+    kernel = get_potential_noise_kernel(
         hamiltonian["basis"][0],
         mass,
         temperature,
         gamma,
     )
-    diagonal_operators = get_single_factorized_noise_operators_diagonal(
-        potential_kernel,
-    )
-    operators = as_operator_list(
-        diagonal_operators,
-    )
-    converted = convert_operator_list_to_basis(operators, hamiltonian["basis"])
-
-    lhs = apply_function_to_operator(
+    operators = get_single_factorized_noise_operators_diagonal(kernel)
+    hamiltonian_converted = convert_operator_to_basis(
         hamiltonian,
-        lambda x: np.exp(-x / (temperature * Boltzmann)),
-    )
-    rhs = apply_function_to_operator(
-        hamiltonian,
-        lambda x: np.exp(x / (temperature * Boltzmann)),
-    )
-    rwa_operators = matmul_list_operator(
-        matmul_operator_list(lhs, converted),
-        rhs,
+        operators["basis"][1],
     )
 
-    return get_noise_kernel(
-        {
-            "basis": rwa_operators["basis"],
-            "data": rwa_operators["data"],
-            "eigenvalue": diagonal_operators["eigenvalue"],
-        },
+    return get_temperature_corrected_noise_operators(
+        hamiltonian_converted,
+        operators,
+        temperature,
     )

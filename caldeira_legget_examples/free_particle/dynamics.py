@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 import numpy as np
@@ -11,14 +12,10 @@ from surface_potential_analysis.dynamics.schrodinger.solve import (
     solve_schrodinger_equation_decomposition,
 )
 from surface_potential_analysis.dynamics.stochastic_schrodinger.solve import (
-    solve_stochastic_schrodinger_equation,
-)
-from surface_potential_analysis.kernel.kernel import (
-    get_single_factorized_noise_operators_diagonal,
+    solve_stochastic_schrodinger_equation_rust,
 )
 from surface_potential_analysis.operator.operator import SingleBasisOperator
 from surface_potential_analysis.operator.operator_list import (
-    as_operator_list,
     select_operator,
 )
 from surface_potential_analysis.stacked_basis.conversion import (
@@ -30,11 +27,11 @@ from surface_potential_analysis.state_vector.conversion import (
 from surface_potential_analysis.state_vector.state_vector_list import (
     StateVectorList,
 )
+from surface_potential_analysis.util.decorators import npy_cached_dict
 
 from .system import (
     get_hamiltonian,
-    get_most_significant_noise_operator,
-    get_potential_noise_kernel,
+    get_noise_operators,
 )
 
 if TYPE_CHECKING:
@@ -62,7 +59,8 @@ def get_initial_state(basis: _B0Inv) -> StateVector[_B0Inv]:
     data = np.zeros(basis.fundamental_n, dtype=np.complex128)
     util = BasisUtil(basis)
     middle = util.fundamental_n // 2
-    data = np.exp(-((util.fundamental_nx_points - middle) ** 2) / 4)
+    width = util.fundamental_n // 10
+    data = np.exp(-((util.fundamental_nx_points - middle) ** 2) / width)
     data /= np.sqrt(np.sum(np.abs(data) ** 2))
 
     return convert_state_vector_to_basis(
@@ -100,10 +98,10 @@ def get_coherent_evolution_decomposition() -> (
     return solve_schrodinger_equation_decomposition(initial_state, times, hamiltonian)
 
 
-# @npy_cached_dict(
-#     Path("examples/data/harmonic/stochastic.256000.3.npz"),
-#     load_pickle=True,
-# )
+@npy_cached_dict(
+    Path("examples/data/free_particle/stochastic.npz"),
+    load_pickle=True,
+)
 def get_stochastic_evolution() -> (
     StateVectorList[
         StackedBasisLike[
@@ -113,58 +111,30 @@ def get_stochastic_evolution() -> (
         StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],
     ]
 ):
-    hamiltonian = get_hamiltonian(21)
+    times = EvenlySpacedTimeBasis(400, 40000, 0, 5 * hbar)
+    temperature = 3 / Boltzmann
+    n_states = 31
+
+    hamiltonian = get_hamiltonian(n_states)
     initial_state = get_initial_state(hamiltonian["basis"][0])
-    times = EvenlySpacedTimeBasis(100, 10000, 0, hbar * 0.5)
-    noise = get_most_significant_noise_operator(21, 10 / Boltzmann)
-    noise["data"] *= hbar
-    print(np.max(np.abs(noise["data"])) / hbar)
-    print(np.max(np.abs(hamiltonian["data"])))
 
-    return solve_stochastic_schrodinger_equation(
-        initial_state,
-        times,
-        hamiltonian,
-        [noise],
-    )
-
-
-# @npy_cached_dict(
-#     Path("examples/data/free_particle/stochastic.10.npz"),
-#     load_pickle=True,
-# )
-def get_stochastic_evolution_high_t() -> (
-    StateVectorList[
-        StackedBasisLike[
-            FundamentalBasis[Literal[1]],
-            EvenlySpacedTimeBasis[int, int, int],
-        ],
-        StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],
-    ]
-):
-    hamiltonian = get_hamiltonian(31)
-    initial_state = get_initial_state(hamiltonian["basis"][0])
-    times = EvenlySpacedTimeBasis(2, 20, 0, hbar * 0.005)
-    kernel = get_potential_noise_kernel(31, 10 / Boltzmann)
-    operators = get_single_factorized_noise_operators_diagonal(kernel)
+    operators = get_noise_operators(n_states, temperature)
     operator_list = list[SingleBasisOperator[Any]]()
     args = np.argsort(np.abs(operators["eigenvalue"]))[::-1]
 
-    for idx in args[:6]:
+    for idx in args[1:13]:
         operator = select_operator(
-            as_operator_list(operators),
+            operators,
             idx=idx,
         )
 
-        operator["data"] *= (
-            hbar * 10 * 10**16 * np.lib.scimath.sqrt(operators["eigenvalue"][idx])
-        )
-        print(np.min(np.abs(operator["data"])) ** 2 / hbar)
-        print(np.max(np.abs(operator["data"])) ** 2 / hbar)
+        operator["data"] *= 12 * np.lib.scimath.sqrt(operators["eigenvalue"][idx])
+        print(np.min(np.abs(operator["data"])) ** 2)
+        print(np.max(np.abs(operator["data"])) ** 2)
         operator_list.append(operator)
     print(np.max(np.abs(hamiltonian["data"])))
 
-    return solve_stochastic_schrodinger_equation(
+    return solve_stochastic_schrodinger_equation_rust(
         initial_state,
         times,
         hamiltonian,
