@@ -21,6 +21,7 @@ from surface_potential_analysis.kernel.kernel import (
 )
 from surface_potential_analysis.operator.conversion import (
     convert_operator_to_basis,
+    sample_operator_list,
 )
 from surface_potential_analysis.operator.operator import (
     add_operator,
@@ -62,12 +63,6 @@ _B1 = TypeVar(
 _B0 = TypeVar(
     "_B0",
     bound=BasisLike[Any, Any],
-)
-
-
-_BL0 = TypeVar(
-    "_BL0",
-    bound=BasisWithLengthLike[Any, Any, Literal[1]],
 )
 
 
@@ -133,23 +128,32 @@ def get_displacements(
     return (delta + n // 2) % n - (n // 2)
 
 
+def get_eta(gamma: float, mass: float) -> float:
+    return 2 * mass * gamma
+
+
 def get_potential_noise_kernel(
     basis: StackedBasisLike[BasisWithLengthLike[Any, Any, Literal[1]]],
-    mass: float,
+    eta: float,
     temperature: float,
-    gamma: float,
+    *,
+    lambda_factor: float = 2 * np.sqrt(2),
 ) -> SingleBasisDiagonalNoiseKernel[
     StackedBasisLike[FundamentalPositionBasis[Any, Literal[1]]]
 ]:
-    mu = np.sqrt(4 * mass * Boltzmann * temperature / hbar**2)
-    beta = mu**2 * gamma / 2
-
     basis_x = StackedBasis(basis_as_fundamental_position_basis(basis[0]))
 
     util = BasisUtil(basis_x[0])
     n_x_points = util.nx_points
     displacements = get_displacements(n_x_points) * util.dx
-    correlation = np.exp(-((displacements * beta) ** 2) / 2).astype(np.complex128)
+
+    lambda_ = np.max(np.abs(displacements)) / lambda_factor
+    # mu = A / lambda
+    mu = np.sqrt(2 * eta * Boltzmann * temperature / hbar**2)
+    a = mu * lambda_
+    correlation = a**2 * np.exp(-(displacements**2) / (2 * lambda_**2)).astype(
+        np.complex128,
+    )
 
     return {
         "basis": StackedBasis(
@@ -172,7 +176,7 @@ def get_temperature_corrected_operators(
     _B1,
 ]:
     commutator = get_commutator_operator_list(hamiltonian, operators)
-    correction = scale_operator_list(1j / (4 * Boltzmann * temperature), commutator)
+    correction = scale_operator_list(-1 / (4 * Boltzmann * temperature), commutator)
     return add_list_list(operators, correction)
 
 
@@ -205,9 +209,8 @@ def get_noise_operators(
     hamiltonian: SingleBasisOperator[
         StackedBasisLike[BasisWithLengthLike[Any, Any, Literal[1]]]
     ],
-    mass: float,
+    eta: float,
     temperature: float,
-    gamma: float,
 ) -> SingleBasisNoiseOperatorList[
     FundamentalBasis[int],
     StackedBasisLike[FundamentalPositionBasis[Any, Literal[1]]],
@@ -231,9 +234,8 @@ def get_noise_operators(
     """
     kernel = get_potential_noise_kernel(
         hamiltonian["basis"][0],
-        mass,
+        eta,
         temperature,
-        gamma,
     )
     operators = get_single_factorized_noise_operators_diagonal(kernel)
     hamiltonian_converted = convert_operator_to_basis(
@@ -246,3 +248,32 @@ def get_noise_operators(
         operators,
         temperature,
     )
+
+
+def get_noise_operators_sampled(
+    operators: SingleBasisNoiseOperatorList[_B0, _SB0],
+    *,
+    n: int | None = None,
+) -> SingleBasisNoiseOperatorList[_B0, Any]:
+    """Given a set of noise operators, get the equivalent operators in a sampled basis.
+
+    This is useful to remove the periodicity in momentum space.
+    This removes any scattering between neighboring k from +k_n/2 to -k_n/2.
+    This is because these states are far apart in the large (over sampled) basis.
+
+
+    Returns
+    -------
+    SingleBasisNoiseOperatorList[_B0, _SB0]
+
+    """
+    sampled = sample_operator_list(
+        operators,
+        sample=(operators["basis"][1][0].fundamental_n // 2 if n is None else n,),
+    )
+
+    return {
+        "basis": sampled["basis"],
+        "data": sampled["data"],
+        "eigenvalue": operators["eigenvalue"],
+    }

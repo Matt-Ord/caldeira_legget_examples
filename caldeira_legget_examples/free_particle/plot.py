@@ -2,10 +2,9 @@ from matplotlib import pyplot as plt
 from scipy.constants import Boltzmann
 from surface_potential_analysis.operator.plot import plot_eigenstate_occupations
 from surface_potential_analysis.state_vector.plot import (
-    animate_all_band_occupations,
     animate_state_over_list_1d_k,
     animate_state_over_list_1d_x,
-    plot_all_band_occupations,
+    plot_average_band_occupation,
     plot_state_1d_x,
 )
 from surface_potential_analysis.state_vector.state_vector_list import (
@@ -64,6 +63,7 @@ def plot_stochastic_evolution() -> None:
     fig.show()
 
     fig, ax, _anim3 = animate_state_over_list_1d_k(states)
+    _, _, _anim4 = animate_state_over_list_1d_k(states, ax=ax, measure="real")
     fig.show()
 
     input()
@@ -72,18 +72,20 @@ def plot_stochastic_evolution() -> None:
 def plot_stochastic_occupation() -> None:
     states = get_stochastic_evolution()
 
-    hamiltonian = get_hamiltonian(31)
-    fig0, ax0 = plot_all_band_occupations(hamiltonian, states)
+    hamiltonian = get_hamiltonian(41)
+    # fig0, ax0 = plot_all_band_occupations(hamiltonian, states)
 
-    fig1, ax1, _anim0 = animate_all_band_occupations(hamiltonian, states)
+    # fig1, ax1, _anim1 = animate_all_band_occupations(hamiltonian, states)
 
-    for ax in [ax0, ax1]:
+    fig2, ax2, _anim2 = plot_average_band_occupation(hamiltonian, states)
+
+    for ax in [ax2]:
         _, _, line = plot_eigenstate_occupations(hamiltonian, 3 / Boltzmann, ax=ax)
         line.set_linestyle("--")
-        line.set_label("Expected")
 
         ax.legend([line], ["Expected occupation"])
 
-    fig0.show()
-    fig1.show()
+    # fig0.show()
+    # fig1.show()
+    fig2.show()
     input()

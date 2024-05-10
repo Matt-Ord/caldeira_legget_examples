@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 import numpy as np
@@ -11,9 +12,6 @@ from surface_potential_analysis.basis.basis import (
     FundamentalTransformedPositionBasis1d,
     TransformedPositionBasis1d,
 )
-from surface_potential_analysis.basis.basis_like import (
-    BasisWithLengthLike,
-)
 from surface_potential_analysis.basis.evenly_spaced_basis import (
     EvenlySpacedTransformedPositionBasis,
 )
@@ -24,35 +22,43 @@ from surface_potential_analysis.basis.stacked_basis import (
 from surface_potential_analysis.hamiltonian_builder.momentum_basis import (
     total_surface_hamiltonian,
 )
+from surface_potential_analysis.operator.conversion import (
+    convert_operator_list_to_basis,
+    sample_operator,
+)
 from surface_potential_analysis.potential.conversion import convert_potential_to_basis
 from surface_potential_analysis.stacked_basis.conversion import (
     stacked_basis_as_fundamental_momentum_basis,
     stacked_basis_as_fundamental_position_basis,
 )
+from surface_potential_analysis.util.decorators import npy_cached_dict
 
 from caldeira_legget_examples.util import (
     get_caldeira_leggett_noise_operator,
+    get_eta,
+    get_noise_operators_sampled,
+    get_potential_noise_kernel,
 )
 from caldeira_legget_examples.util import (
     get_noise_operators as get_noise_operators_generic,
 )
 
 if TYPE_CHECKING:
-    from surface_potential_analysis.kernel.kernel import SingleBasisNoiseOperatorList
+    from surface_potential_analysis.kernel.kernel import (
+        SingleBasisDiagonalNoiseKernel,
+        SingleBasisNoiseOperatorList,
+    )
     from surface_potential_analysis.operator.operator import SingleBasisOperator
     from surface_potential_analysis.potential.potential import Potential
 
 _L0Inv = TypeVar("_L0Inv", bound=int)
 _L1Inv = TypeVar("_L1Inv", bound=int)
-_B0Inv = TypeVar(
-    "_B0Inv",
-    bound=StackedBasisLike[BasisWithLengthLike[Any, Any, Literal[1]]],
-)
 
 LATTICE_CONSTANT = 3.615 * 10**-10
 BARRIER_ENERGY = 55 * 10**-3 * electron_volt
 SODIUM_MASS = 3.8175458e-26
 SODIUM_GAMMA = 0.2e12
+SODIUM_ETA = get_eta(SODIUM_GAMMA, SODIUM_MASS)
 
 
 def get_potential() -> (
@@ -115,38 +121,74 @@ def get_hamiltonian(
     shape: tuple[_L0Inv],
     resolution: tuple[_L0Inv],
 ) -> SingleBasisOperator[StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],]:
-    potential = get_extended_interpolated_potential(shape, resolution)
+    potential = get_extended_interpolated_potential(shape, (resolution[0] + 2,))
     converted = convert_potential_to_basis(
         potential,
         stacked_basis_as_fundamental_position_basis(potential["basis"]),
     )
-    return total_surface_hamiltonian(converted, SODIUM_MASS, np.array([0]))
+    return sample_operator(
+        total_surface_hamiltonian(converted, SODIUM_MASS, np.array([0])),
+        sample=tuple(s * r for s, r in zip(shape, resolution, strict=True)),
+    )
 
 
 def get_noise_operator(
-    basis: _B0Inv,
+    shape: tuple[_L0Inv],
+    resolution: tuple[_L0Inv],
     temperature: float,
-) -> SingleBasisOperator[_B0Inv]:
+) -> SingleBasisOperator[StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]]]:
+    hamiltonain = get_hamiltonian(shape, resolution)
     return get_caldeira_leggett_noise_operator(
-        basis,
+        hamiltonain["basis"][0],
         SODIUM_MASS,
         temperature,
         SODIUM_GAMMA,
     )
 
 
+def get_noise_kernel(
+    shape: tuple[_L0Inv],
+    resolution: tuple[_L0Inv],
+    temperature: float,
+) -> SingleBasisDiagonalNoiseKernel[
+    StackedBasisLike[FundamentalPositionBasis[Any, Literal[1]]],
+]:
+    hamiltonian = get_hamiltonian(shape, resolution)
+    return get_potential_noise_kernel(
+        hamiltonian["basis"][0],
+        SODIUM_ETA,
+        temperature,
+    )
+
+
+def get_noise_operators_cache(
+    shape: tuple[_L0Inv],
+    resolution: tuple[_L0Inv],
+    temperature: float,
+) -> Path:
+    return Path(f"noise_operators_{shape[0]}_{resolution[0]}_{temperature}")
+
+
+@npy_cached_dict(get_noise_operators_cache, load_pickle=True)
 def get_noise_operators(
-    hamiltonian: SingleBasisOperator[
-        StackedBasisLike[FundamentalPositionBasis[Any, Literal[1]]]
-    ],
+    shape: tuple[_L0Inv],
+    resolution: tuple[_L0Inv],
     temperature: float,
 ) -> SingleBasisNoiseOperatorList[
     FundamentalBasis[int],
     StackedBasisLike[FundamentalPositionBasis[Any, Literal[1]]],
 ]:
-    return get_noise_operators_generic(
-        hamiltonian,
-        SODIUM_MASS,
+    hamiltonian_large = get_hamiltonian(shape, (resolution[0] * 2,))
+    full_operators = get_noise_operators_generic(
+        hamiltonian_large,
+        SODIUM_ETA,
         temperature,
-        SODIUM_GAMMA,
     )
+    sampled_operators = get_noise_operators_sampled(full_operators)
+    hamiltonian = get_hamiltonian(shape, resolution)
+    converted = convert_operator_list_to_basis(sampled_operators, hamiltonian["basis"])
+    return {
+        "basis": converted["basis"],
+        "data": converted["data"],
+        "eigenvalue": sampled_operators["eigenvalue"],
+    }

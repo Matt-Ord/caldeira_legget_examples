@@ -15,9 +15,12 @@ from surface_potential_analysis.dynamics.schrodinger.solve import (
 )
 from surface_potential_analysis.dynamics.stochastic_schrodinger.solve import (
     solve_stochastic_schrodinger_equation,
-    solve_stochastic_schrodinger_equation_rust,
+    solve_stochastic_schrodinger_equation_rust_banded,
 )
-from surface_potential_analysis.operator.operator_list import operator_list_into_iter
+from surface_potential_analysis.operator.operator import SingleBasisOperator
+from surface_potential_analysis.operator.operator_list import (
+    select_operator,
+)
 from surface_potential_analysis.stacked_basis.conversion import (
     stacked_basis_as_fundamental_position_basis,
 )
@@ -27,7 +30,7 @@ from surface_potential_analysis.state_vector.conversion import (
 from surface_potential_analysis.state_vector.state_vector_list import (
     StateVectorList,
 )
-from surface_potential_analysis.util.decorators import npy_cached_dict
+from surface_potential_analysis.util.decorators import npy_cached_dict, timed
 
 from .system import get_hamiltonian, get_noise_operator, get_noise_operators
 
@@ -131,9 +134,10 @@ def get_stochastic_evolution_caldeira_leggett() -> (
 
 
 @npy_cached_dict(
-    Path("examples/data/sodium_copper/stochastic.npz"),
+    Path("examples/data/sodium_copper/stochastic.3.31.800.8000.run.2.npz"),
     load_pickle=True,
 )
+@timed
 def get_stochastic_evolution() -> (
     StateVectorList[
         StackedBasisLike[
@@ -143,14 +147,38 @@ def get_stochastic_evolution() -> (
         StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],
     ]
 ):
-    hamiltonian = get_hamiltonian((5,), (81,))
+    resolution = (31,)
+    hamiltonian = get_hamiltonian((3,), resolution)
     initial_state = get_initial_state(hamiltonian["basis"][0])
-    times = EvenlySpacedTimeBasis(400, 1000, 0, 2e-11)
-    noise = get_noise_operators(hamiltonian, 155)
+    times = EvenlySpacedTimeBasis(800, 8000, 0, 8e-11)
+    temperature = 155
 
-    return solve_stochastic_schrodinger_equation_rust(
+    operators = get_noise_operators((3,), resolution, temperature)
+    operator_list = list[SingleBasisOperator[Any]]()
+    args = np.argsort(np.abs(operators["eigenvalue"]))[::-1]
+
+    print(operators["basis"])
+    print("Collapse Operators")
+    print("------------------")
+    for idx in args[1:7]:
+        operator = select_operator(
+            operators,
+            idx=idx,
+        )
+
+        operator["data"] *= np.lib.scimath.sqrt(operators["eigenvalue"][idx] * hbar)
+
+        print(np.max(np.abs(operator["data"])) ** 2)
+        operator_list.append(operator)
+
+    print("")
+    print("Coherent Operator")
+    print("------------------")
+    print(np.max(np.abs(hamiltonian["data"])))
+
+    return solve_stochastic_schrodinger_equation_rust_banded(
         initial_state,
         times,
         hamiltonian,
-        list(operator_list_into_iter(noise)),
+        operator_list,
     )

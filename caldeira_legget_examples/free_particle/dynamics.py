@@ -31,7 +31,7 @@ from surface_potential_analysis.util.decorators import npy_cached_dict
 
 from .system import (
     get_hamiltonian,
-    get_noise_operators,
+    get_non_periodic_noise_operators,
 )
 
 if TYPE_CHECKING:
@@ -98,8 +98,9 @@ def get_coherent_evolution_decomposition() -> (
     return solve_schrodinger_equation_decomposition(initial_state, times, hamiltonian)
 
 
+# n_states.n_time.n_step.operator_prefactor
 @npy_cached_dict(
-    Path("examples/data/free_particle/stochastic.npz"),
+    Path("examples/data/free_particle/stochastic.41.8000.1000.5.npz"),
     load_pickle=True,
 )
 def get_stochastic_evolution() -> (
@@ -111,27 +112,33 @@ def get_stochastic_evolution() -> (
         StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],
     ]
 ):
-    times = EvenlySpacedTimeBasis(400, 40000, 0, 5 * hbar)
+    times = EvenlySpacedTimeBasis(8000, 1000, 0, 80 * hbar)
     temperature = 3 / Boltzmann
-    n_states = 31
+    n_states = 41
 
     hamiltonian = get_hamiltonian(n_states)
     initial_state = get_initial_state(hamiltonian["basis"][0])
 
-    operators = get_noise_operators(n_states, temperature)
+    operators = get_non_periodic_noise_operators(n_states, temperature)
     operator_list = list[SingleBasisOperator[Any]]()
     args = np.argsort(np.abs(operators["eigenvalue"]))[::-1]
 
+    print("Collapse Operators")
+    print("------------------")
     for idx in args[1:13]:
         operator = select_operator(
             operators,
             idx=idx,
         )
 
-        operator["data"] *= 12 * np.lib.scimath.sqrt(operators["eigenvalue"][idx])
-        print(np.min(np.abs(operator["data"])) ** 2)
+        operator["data"] *= 5 * np.lib.scimath.sqrt(operators["eigenvalue"][idx])
+
         print(np.max(np.abs(operator["data"])) ** 2)
         operator_list.append(operator)
+
+    print("")
+    print("Coherent Operator")
+    print("------------------")
     print(np.max(np.abs(hamiltonian["data"])))
 
     return solve_stochastic_schrodinger_equation_rust(

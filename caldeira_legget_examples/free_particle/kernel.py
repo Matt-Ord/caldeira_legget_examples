@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.constants import Boltzmann
+from surface_potential_analysis.basis.stacked_basis import StackedBasis
 from surface_potential_analysis.kernel.kernel import (
-    get_single_factorized_noise_operators,
     get_single_factorized_noise_operators_diagonal,
     truncate_diagonal_noise_kernel,
 )
@@ -17,15 +17,18 @@ from surface_potential_analysis.operator.operator_list import (
 from surface_potential_analysis.operator.plot import (
     plot_diagonal_operator_along_diagonal,
     plot_eigenstate_occupations,
-    plot_eigenvalues,
     plot_operator_2d,
-    plot_operator_along_diagonal,
+)
+from surface_potential_analysis.stacked_basis.conversion import (
+    stacked_basis_as_fundamental_momentum_basis,
+    stacked_basis_as_fundamental_position_basis,
 )
 
-from caldeira_legget_examples.util import get_temperature_corrected_noise_operators
+from caldeira_legget_examples.util import get_noise_operators_sampled
 
 from .system import (
     get_hamiltonian,
+    get_noise_operators,
     get_potential_noise_kernel,
 )
 
@@ -92,69 +95,59 @@ def plot_state_boltzmann_occupation() -> None:
     input()
 
 
-def plot_full_noise_kernel_largest_operator() -> None:
-    pos_basis = get_hamiltonian(21)["basis"]
-    kernel = get_potential_noise_kernel(61, 10 / Boltzmann)
-    operators = get_single_factorized_noise_operators_diagonal(kernel)
-    operators = get_single_factorized_noise_operators(kernel)
-    args = np.argsort(np.abs(operators["eigenvalue"]))[::-1]
+def plot_largest_collapse_operator() -> None:
+    temperature = 3 / Boltzmann
+    n_states = 31
 
-    for idx in args[:5]:
-        operator = select_operator(operators, idx=idx)
-
-        fig, ax, _ = plot_eigenvalues(operator, measure="real")
-        _, _, _ = plot_eigenvalues(operator, measure="imag", ax=ax)
-        _, _, _ = plot_eigenvalues(operator, measure="abs", ax=ax)
-        fig.show()
-
-        converted = convert_operator_to_basis(operator, pos_basis)
-
-        fig, ax, _ = plot_operator_along_diagonal(converted, measure="abs")
-        _, _, _ = plot_operator_along_diagonal(converted, measure="real", ax=ax)
-        _, _, _ = plot_operator_along_diagonal(converted, measure="imag", ax=ax)
-        ax.legend()
-
-        fig.show()
-
-        fig, _, _ = plot_operator_2d(converted)
-        fig.show()
-
-    input()
-
-
-def plot_temperature_corrected_operator() -> None:
-    temperature = 10 / Boltzmann
-    size = 61
-    kernel = get_potential_noise_kernel(61, temperature)
-    operators = get_single_factorized_noise_operators_diagonal(kernel)
-
-    hamiltonian = get_hamiltonian(size)
-    corrected = get_temperature_corrected_noise_operators(
-        hamiltonian,
-        operators,
-        temperature,
+    operators = get_noise_operators(n_states, temperature)
+    operators = get_noise_operators_sampled(
+        get_noise_operators(n_states * 2, temperature),
     )
 
-    args = np.argsort(np.abs(corrected["eigenvalue"]))[::-1]
+    args = np.argsort(np.abs(operators["eigenvalue"]))[::-1]
 
-    for idx in args[:5]:
-        operator = select_operator(corrected, idx=idx)
+    x_basis = stacked_basis_as_fundamental_position_basis(
+        operators["basis"][1][0],
+    )
+    k_basis = stacked_basis_as_fundamental_momentum_basis(
+        operators["basis"][1][0],
+    )
 
-        fig, ax, _ = plot_eigenvalues(operator, measure="real")
-        _, _, _ = plot_eigenvalues(operator, measure="imag", ax=ax)
-        _, _, _ = plot_eigenvalues(operator, measure="abs", ax=ax)
+    for idx in args[:3]:
+        operator = select_operator(operators, idx=idx)
+
+        # fig, ax, _ = plot_eigenvalues(operator, measure="real")
+        # _, _, _ = plot_eigenvalues(operator, measure="imag", ax=ax)
+        # _, _, _ = plot_eigenvalues(operator, measure="abs", ax=ax)
+        # fig.show()
+
+        operator_x = convert_operator_to_basis(
+            operator,
+            StackedBasis(x_basis, x_basis),
+        )
+
+        # fig, ax, _ = plot_operator_along_diagonal(operator_x, measure="abs")
+        # _, _, _ = plot_operator_along_diagonal(operator_x, measure="real", ax=ax)
+        # _, _, _ = plot_operator_along_diagonal(operator_x, measure="imag", ax=ax)
+        # ax.legend()
+        # fig.show()
+
+        fig, ax, _ = plot_operator_2d(operator_x)
+        ax.set_title("Operator in X")
         fig.show()
 
-        converted = convert_operator_to_basis(operator, hamiltonian["basis"])
+        operator_k = convert_operator_to_basis(
+            operator,
+            StackedBasis(k_basis, k_basis),
+        )
 
-        fig, ax, _ = plot_operator_along_diagonal(converted, measure="abs")
-        _, _, _ = plot_operator_along_diagonal(converted, measure="real", ax=ax)
-        _, _, _ = plot_operator_along_diagonal(converted, measure="imag", ax=ax)
-        ax.legend()
+        # fig, ax, _ = plot_operator_along_diagonal(operator_k, measure="abs")
+        # _, _, _ = plot_operator_along_diagonal(operator_k, measure="real", ax=ax)
+        # _, _, _ = plot_operator_along_diagonal(operator_k, measure="imag", ax=ax)
+        # ax.legend()
+        # fig.show()
 
+        fig, ax, _ = plot_operator_2d(operator_k)
+        ax.set_title("Operator in K")
         fig.show()
-
-        fig, _, _ = plot_operator_2d(converted)
-        fig.show()
-
     input()
