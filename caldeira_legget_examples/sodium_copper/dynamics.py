@@ -134,7 +134,7 @@ def get_stochastic_evolution_caldeira_leggett() -> (
 
 
 @npy_cached_dict(
-    Path("examples/data/sodium_copper/stochastic.3.31.800.8000.run.2.npz"),
+    Path("examples/data/sodium_copper/stochastic.3.31.800.16000.run.1.npz"),
     load_pickle=True,
 )
 @timed
@@ -150,7 +150,7 @@ def get_stochastic_evolution() -> (
     resolution = (31,)
     hamiltonian = get_hamiltonian((3,), resolution)
     initial_state = get_initial_state(hamiltonian["basis"][0])
-    times = EvenlySpacedTimeBasis(800, 8000, 0, 8e-11)
+    times = EvenlySpacedTimeBasis(800, 16000, 0, 8e-11)
     temperature = 155
 
     operators = get_noise_operators((3,), resolution, temperature)
@@ -175,6 +175,9 @@ def get_stochastic_evolution() -> (
     print("Coherent Operator")
     print("------------------")
     print(np.max(np.abs(hamiltonian["data"])))
+    ## This is roughly the number of timesteps per full rotation of phase
+    ## should be much less than 1...
+    print(times.fundamental_dt * np.max(np.abs(hamiltonian["data"])) / hbar)
 
     return solve_stochastic_schrodinger_equation_rust_banded(
         initial_state,
