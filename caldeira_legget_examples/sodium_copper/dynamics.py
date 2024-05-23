@@ -32,7 +32,12 @@ from surface_potential_analysis.state_vector.state_vector_list import (
 )
 from surface_potential_analysis.util.decorators import npy_cached_dict, timed
 
-from .system import get_hamiltonian, get_noise_operator, get_noise_operators
+from .system import (
+    PeriodicSystem,
+    get_hamiltonian,
+    get_noise_operator,
+    get_noise_operators,
+)
 
 if TYPE_CHECKING:
     from surface_potential_analysis.basis.basis import (
@@ -56,11 +61,15 @@ if TYPE_CHECKING:
     )
 
 
+_L0Inv = TypeVar("_L0Inv", bound=int)
+_L1Inv = TypeVar("_L1Inv", bound=int)
+
+
 def get_initial_state(basis: _B0Inv) -> StateVector[_B0Inv]:
     data = np.zeros(basis.fundamental_n, dtype=np.complex128)
     util = BasisUtil(basis)
     middle = util.fundamental_n // 2
-    data = np.exp(-((util.fundamental_nx_points - middle) ** 2) / 100)
+    data = np.exp(-((util.fundamental_nx_points - middle) ** 2) / 50)
     data /= np.sqrt(np.sum(np.abs(data) ** 2))
     return convert_state_vector_to_basis(
         {
@@ -71,13 +80,13 @@ def get_initial_state(basis: _B0Inv) -> StateVector[_B0Inv]:
     )
 
 
-def get_coherent_evolution() -> (
-    StateVectorList[
-        EvenlySpacedTimeBasis[int, int, int],
-        StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],
-    ]
-):
-    hamiltonian = get_hamiltonian((5,), (81,))
+def get_coherent_evolution(
+    system: PeriodicSystem,
+) -> StateVectorList[
+    EvenlySpacedTimeBasis[int, int, int],
+    StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],
+]:
+    hamiltonian = get_hamiltonian(system, (5,), (81,))
     initial_state = get_initial_state(hamiltonian["basis"][0])
     times = EvenlySpacedTimeBasis(200, 1000, 0, 4e-12)
 
@@ -88,14 +97,16 @@ def get_coherent_evolution() -> (
     )
 
 
-def get_coherent_evolution_decomposition() -> (
-    StateVectorList[
-        EvenlySpacedTimeBasis[int, int, int],
-        StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],
-    ]
-):
-    hamiltonian = get_hamiltonian((5,), (81,))
-    initial_state = get_initial_state(hamiltonian["basis"][0])
+def get_coherent_evolution_decomposition(
+    system: PeriodicSystem,
+) -> StateVectorList[
+    EvenlySpacedTimeBasis[int, int, int],
+    StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],
+]:
+    shape = (3,)
+    resolution = (31,)
+    hamiltonian = get_hamiltonian(system, shape, resolution)
+    initial_state = get_initial_state(system, hamiltonian["basis"][0])
     times = EvenlySpacedTimeBasis(200, 10000, 0, 4e-12)
 
     return solve_schrodinger_equation_decomposition(
@@ -109,19 +120,21 @@ def get_coherent_evolution_decomposition() -> (
     Path("examples/data/sodium_copper/stochastic.cl.npz"),
     load_pickle=True,
 )
-def get_stochastic_evolution_caldeira_leggett() -> (
-    StateVectorList[
-        StackedBasisLike[
-            FundamentalBasis[Literal[1]],
-            EvenlySpacedTimeBasis[int, int, int],
-        ],
-        StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],
-    ]
-):
-    hamiltonian = get_hamiltonian((5,), (81,))
-    initial_state = get_initial_state(hamiltonian["basis"][0])
+def get_stochastic_evolution_caldeira_leggett(
+    system: PeriodicSystem,
+    shape: tuple[_L0Inv],
+    resolution: tuple[_L1Inv],
+) -> StateVectorList[
+    StackedBasisLike[
+        FundamentalBasis[Literal[1]],
+        EvenlySpacedTimeBasis[int, int, int],
+    ],
+    StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],
+]:
+    hamiltonian = get_hamiltonian(system, shape, resolution)
+    initial_state = get_initial_state(hamiltonian["basis"])
     times = EvenlySpacedTimeBasis(400, 1000, 0, 2e-11)
-    noise = get_noise_operator(hamiltonian["basis"][0], 155)
+    noise = get_noise_operator(system, shape, resolution, 155)
     print(np.max(np.abs(noise["data"] / hbar)) ** 2)
     print(np.max(np.abs(hamiltonian["data"] / hbar)))
 
@@ -133,55 +146,77 @@ def get_stochastic_evolution_caldeira_leggett() -> (
     )
 
 
+def _get_stochastic_evolution_cache(
+    system: PeriodicSystem,
+    shape: tuple[_L0Inv],
+    resolution: tuple[_L1Inv],
+    *,
+    n: int,
+    step: int,
+    dt_ratio: float = 500,
+) -> Path:
+    return Path(
+        f"examples/data/{system.id}/stochastic.{shape[0]}.{resolution[0]}.{n}.{step}.{dt_ratio}.milsten.0.npz",
+    )
+
+
 @npy_cached_dict(
-    Path("examples/data/sodium_copper/stochastic.3.31.800.16000.run.1.npz"),
+    _get_stochastic_evolution_cache,
     load_pickle=True,
 )
 @timed
-def get_stochastic_evolution() -> (
-    StateVectorList[
-        StackedBasisLike[
-            FundamentalBasis[Literal[1]],
-            EvenlySpacedTimeBasis[int, int, int],
-        ],
-        StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],
-    ]
-):
-    resolution = (31,)
-    hamiltonian = get_hamiltonian((3,), resolution)
+def get_stochastic_evolution(
+    system: PeriodicSystem,
+    shape: tuple[_L0Inv],
+    resolution: tuple[_L1Inv],
+    *,
+    n: int,
+    step: int,
+    dt_ratio: float = 500,
+) -> StateVectorList[
+    StackedBasisLike[
+        FundamentalBasis[Literal[1]],
+        EvenlySpacedTimeBasis[int, int, int],
+    ],
+    StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],
+]:
+    hamiltonian = get_hamiltonian(system, shape, resolution)
+
     initial_state = get_initial_state(hamiltonian["basis"][0])
-    times = EvenlySpacedTimeBasis(800, 16000, 0, 8e-11)
+    dt = hbar / (np.max(np.abs(hamiltonian["data"])) * dt_ratio)
+    times = EvenlySpacedTimeBasis(n, step, 0, n * step * dt)
     temperature = 155
 
-    operators = get_noise_operators((3,), resolution, temperature)
+    operators = get_noise_operators(system, shape, resolution, temperature)
     operator_list = list[SingleBasisOperator[Any]]()
     args = np.argsort(np.abs(operators["eigenvalue"]))[::-1]
 
-    print(operators["basis"])
-    print("Collapse Operators")
-    print("------------------")
+    print(operators["basis"])  # noqa: T201
+    print("Collapse Operators")  # noqa: T201
+    print("------------------")  # noqa: T201
     for idx in args[1:7]:
         operator = select_operator(
             operators,
             idx=idx,
         )
-
+        print(operators["eigenvalue"][idx])  # noqa: T201
         operator["data"] *= np.lib.scimath.sqrt(operators["eigenvalue"][idx] * hbar)
 
-        print(np.max(np.abs(operator["data"])) ** 2)
+        print(np.max(np.abs(operator["data"])) ** 2)  # noqa: T201
         operator_list.append(operator)
 
-    print("")
-    print("Coherent Operator")
-    print("------------------")
-    print(np.max(np.abs(hamiltonian["data"])))
+    print("")  # noqa: T201
+    print("Coherent Operator")  # noqa: T201
+    print("------------------")  # noqa: T201
+    print(np.max(np.abs(hamiltonian["data"])))  # noqa: T201
     ## This is roughly the number of timesteps per full rotation of phase
     ## should be much less than 1...
-    print(times.fundamental_dt * np.max(np.abs(hamiltonian["data"])) / hbar)
+    print(times.fundamental_dt * np.max(np.abs(hamiltonian["data"])) / hbar)  # noqa: T201
 
     return solve_stochastic_schrodinger_equation_rust_banded(
         initial_state,
         times,
         hamiltonian,
         operator_list,
+        method="order2",
     )

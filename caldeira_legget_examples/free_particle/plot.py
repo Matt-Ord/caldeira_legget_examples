@@ -73,10 +73,6 @@ def plot_stochastic_occupation() -> None:
     states = get_stochastic_evolution()
 
     hamiltonian = get_hamiltonian(41)
-    # fig0, ax0 = plot_all_band_occupations(hamiltonian, states)
-
-    # fig1, ax1, _anim1 = animate_all_band_occupations(hamiltonian, states)
-
     fig2, ax2, _anim2 = plot_average_band_occupation(hamiltonian, states)
 
     for ax in [ax2]:
@@ -85,7 +81,5 @@ def plot_stochastic_occupation() -> None:
 
         ax.legend([line], ["Expected occupation"])
 
-    # fig0.show()
-    # fig1.show()
     fig2.show()
     input()
