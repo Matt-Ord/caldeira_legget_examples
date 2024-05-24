@@ -15,20 +15,19 @@ from surface_potential_analysis.basis.stacked_basis import (
 from surface_potential_analysis.hamiltonian_builder.momentum_basis import (
     total_surface_hamiltonian,
 )
+from surface_potential_analysis.kernel.gaussian import (
+    get_effective_gaussian_noise_kernel,
+)
+from surface_potential_analysis.kernel.gaussian import (
+    get_effective_gaussian_noise_operators as get_noise_operators_generic,
+)
+from surface_potential_analysis.kernel.kernel import (
+    get_noise_operators_sampled,
+)
 from surface_potential_analysis.operator.conversion import (
     convert_operator_list_to_basis,
 )
 from surface_potential_analysis.operator.operator_list import select_operator
-
-from caldeira_legget_examples.util import (
-    get_noise_operators as get_noise_operators_generic,
-)
-from caldeira_legget_examples.util import (
-    get_noise_operators_sampled,
-)
-from caldeira_legget_examples.util import (
-    get_potential_noise_kernel as get_potential_noise_kernel_generic,
-)
 
 if TYPE_CHECKING:
     from surface_potential_analysis.kernel.kernel import (
@@ -71,7 +70,7 @@ def get_potential_noise_kernel(
     StackedBasisLike[FundamentalPositionBasis[_L0Inv, Literal[1]]]
 ]:
     hamiltonian = get_hamiltonian(size)
-    return get_potential_noise_kernel_generic(
+    return get_effective_gaussian_noise_kernel(
         hamiltonian["basis"][0],
         ATOM_ETA,
         temperature,

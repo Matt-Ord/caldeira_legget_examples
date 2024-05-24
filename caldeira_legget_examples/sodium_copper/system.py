@@ -22,6 +22,15 @@ from surface_potential_analysis.basis.stacked_basis import (
 from surface_potential_analysis.hamiltonian_builder.momentum_basis import (
     total_surface_hamiltonian,
 )
+from surface_potential_analysis.kernel.gaussian import (
+    get_effective_gaussian_noise_kernel,
+)
+from surface_potential_analysis.kernel.gaussian import (
+    get_effective_gaussian_noise_operators as get_noise_operators_generic,
+)
+from surface_potential_analysis.kernel.kernel import (
+    get_noise_operators_sampled,
+)
 from surface_potential_analysis.operator.conversion import (
     convert_operator_list_to_basis,
     sample_operator,
@@ -35,11 +44,6 @@ from surface_potential_analysis.stacked_basis.conversion import (
 from caldeira_legget_examples.util import (
     get_caldeira_leggett_noise_operator,
     get_eta,
-    get_noise_operators_sampled,
-    get_potential_noise_kernel,
-)
-from caldeira_legget_examples.util import (
-    get_noise_operators as get_noise_operators_generic,
 )
 
 if TYPE_CHECKING:
@@ -84,6 +88,14 @@ LITHIUM_COPPER_SYSTEM = PeriodicSystem(
     lattice_constant=3.615e-10,
     mass=1.152414898e-26,
     gamma=1.2e12,
+)
+
+HYDROGEN_NICKEL_SYSTEM = PeriodicSystem(
+    id="HNi",
+    barrier_energy=55e-3 * electron_volt,  # TODO: find energy
+    lattice_constant=3.615e-10,  # TODO: find constant
+    mass=1.67e-27,
+    gamma=0.2e12,
 )
 
 
@@ -185,7 +197,7 @@ def get_noise_kernel(
     StackedBasisLike[FundamentalPositionBasis[Any, Literal[1]]],
 ]:
     hamiltonian = get_hamiltonian(system, shape, resolution)
-    return get_potential_noise_kernel(
+    return get_effective_gaussian_noise_kernel(
         hamiltonian["basis"][0],
         system.eta,
         temperature,
