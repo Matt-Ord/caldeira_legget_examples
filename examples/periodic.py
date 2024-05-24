@@ -1,8 +1,8 @@
-from caldeira_legget_examples.sodium_copper.plot import (
+from caldeira_legget_examples.periodic.plot import (
     plot_stochastic_evolution,
     plot_stochastic_occupation,
 )
-from caldeira_legget_examples.sodium_copper.system import (
+from caldeira_legget_examples.periodic.system import (
     LITHIUM_COPPER_SYSTEM,
 )
 
