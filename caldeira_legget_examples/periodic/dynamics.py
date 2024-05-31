@@ -154,9 +154,10 @@ def _get_stochastic_evolution_cache(
     n: int,
     step: int,
     dt_ratio: float = 500,
+    n_trajectories: int = 1,
 ) -> Path:
     return Path(
-        f"examples/data/{system.id}/stochastic.{shape[0]}.{resolution[0]}.{n}.{step}.{dt_ratio}.milsten.0.npz",
+        f"examples/data/{system.id}/stochastic.{shape[0]}.{resolution[0]}.{n}.{step}.{dt_ratio}.{n_trajectories}.npz",
     )
 
 
@@ -173,9 +174,10 @@ def get_stochastic_evolution(
     n: int,
     step: int,
     dt_ratio: float = 500,
+    n_trajectories: int = 1,
 ) -> StateVectorList[
     StackedBasisLike[
-        FundamentalBasis[Literal[1]],
+        FundamentalBasis[int],
         EvenlySpacedTimeBasis[int, int, int],
     ],
     StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],
@@ -218,5 +220,6 @@ def get_stochastic_evolution(
         times,
         hamiltonian,
         operator_list,
-        method="order2",
+        n_trajectories=n_trajectories,
+        method="Order2ExplicitWeak",
     )

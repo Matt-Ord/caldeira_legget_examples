@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast
 
 import numpy as np
 from matplotlib import pyplot as plt
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
-from surface_potential_analysis.basis.basis_like import BasisLike, BasisWithLengthLike
+from surface_potential_analysis.basis.basis_like import BasisWithLengthLike
 from surface_potential_analysis.basis.stacked_basis import (
     StackedBasis,
     StackedBasisLike,
 )
+from surface_potential_analysis.basis.time_basis_like import EvenlySpacedTimeBasis
 from surface_potential_analysis.kernel.plot import (
     plot_diagonal_kernel,
     plot_diagonal_kernel_truncation_error,
@@ -18,6 +21,7 @@ from surface_potential_analysis.operator.conversion import convert_operator_to_b
 from surface_potential_analysis.operator.operator import get_commutator
 from surface_potential_analysis.operator.operator_list import select_operator
 from surface_potential_analysis.operator.plot import (
+    plot_eigenstate_occupations,
     plot_eigenvalues,
     plot_operator_2d,
     plot_operator_diagonal_sparsity,
@@ -28,20 +32,16 @@ from surface_potential_analysis.stacked_basis.conversion import (
     stacked_basis_as_fundamental_momentum_basis,
     stacked_basis_as_fundamental_position_basis,
 )
-from surface_potential_analysis.state_vector.conversion import (
-    convert_state_vector_list_to_basis,
-)
 from surface_potential_analysis.state_vector.eigenstate_calculation import (
     calculate_eigenvectors_hermitian,
 )
-from surface_potential_analysis.state_vector.eigenvalue_list_plot import (
-    plot_eigenstate_occupations,
-)
 from surface_potential_analysis.state_vector.plot import (
+    _get_max_occupation_x,
     animate_state_over_list_1d_k,
     animate_state_over_list_1d_x,
     plot_all_band_occupations,
     plot_average_band_occupation,
+    plot_max_occupation_1d_x,
     plot_state_1d_k,
     plot_state_1d_x,
 )
@@ -64,7 +64,11 @@ from .system import (
 )
 
 if TYPE_CHECKING:
-    from surface_potential_analysis.state_vector.eigenstate_collection import ValueList
+    from surface_potential_analysis.basis.basis import FundamentalBasis
+    from surface_potential_analysis.basis.time_basis_like import BasisWithTimeLike
+    from surface_potential_analysis.state_vector.eigenstate_collection import (
+        StatisticalValueList,
+    )
 
 _L0Inv = TypeVar("_L0Inv", bound=int)
 _L1Inv = TypeVar("_L1Inv", bound=int)
@@ -242,55 +246,44 @@ def plot_stochastic_evolution(
     input()
 
 
-_B0 = TypeVar(
-    "_B0",
-    bound=BasisLike[Any, Any],
-)
-
-
 _BL0 = TypeVar("_BL0", bound=BasisWithLengthLike[Any, Any, Any])
 
 
-def _get_max_occupation_x(
+def get_approximate_isf_max_x(
     states: StateVectorList[
-        _B0,
+        StackedBasisLike[FundamentalBasis[Literal[1]], BasisWithTimeLike[Any, Any]],
         StackedBasisLike[_BL0],
     ],
-) -> ValueList[_B0]:
-    states_x = convert_state_vector_list_to_basis(
-        states,
-        stacked_basis_as_fundamental_position_basis(states["basis"][1]),
+    dk: tuple[float],
+) -> StatisticalValueList[BasisWithTimeLike[Any, Any]]:
+    max_x = _get_max_occupation_x(states)
+    x_points = np.unwrap(
+        max_x["data"].reshape(max_x["basis"].shape).astype(np.float64),
+        period=float(states["basis"][1].fundamental_n),
+        axis=1,
     )
+    print(x_points.shape)
+
+    step = 3
+    basis = EvenlySpacedTimeBasis(
+        min(2000, states["basis"][0][1].n // step),
+        step,
+        0,
+        states["basis"][0][1].delta_t,
+    )
+    average_isf = np.ones(basis.n, dtype=np.float64)
+    std_isf = np.zeros(basis.n, dtype=np.float64)
+    for i, nt in enumerate(basis.nt_points):
+        diff = x_points[:, nt:] - x_points[:, : x_points.shape[1] - nt]
+        isf = np.exp(1j * dk[0] * (diff))
+        sample_average = np.average(isf, axis=(1,))
+        average_isf[i] = np.average(sample_average)
+        std_isf[i] = np.std(sample_average)
 
     return {
-        "basis": states_x["basis"][0],
-        "data": np.argmax(
-            np.abs(states_x["data"].reshape(states_x["basis"].shape)),
-            axis=1,
-        ),
-    }
-
-
-def _get_max_occupation_k(
-    states: StateVectorList[
-        _B0,
-        StackedBasisLike[_BL0],
-    ],
-) -> ValueList[_B0]:
-    states_x = convert_state_vector_list_to_basis(
-        states,
-        stacked_basis_as_fundamental_momentum_basis(states["basis"][1]),
-    )
-
-    return {
-        "basis": states_x["basis"][0],
-        "data": np.argmax(
-            np.fft.fftshift(
-                np.abs(states_x["data"].reshape(states_x["basis"].shape)),
-                axes=1,
-            ),
-            axis=1,
-        ),
+        "basis": basis,
+        "data": average_isf.astype(np.complex128),
+        "standard_deviation": std_isf,
     }
 
 
@@ -300,13 +293,52 @@ def plot_point_evolution(
     resolution: tuple[_L1Inv],
     *,
     dt_ratio: float = 500,
+    n: int = 800,
+    step: int = 4000,
+    n_trajectories: int = 1,
 ) -> None:
     states = get_stochastic_evolution(
         system,
         shape,
         resolution,
-        n=800,
-        step=4000,
+        n=n,
+        step=step,
+        dt_ratio=dt_ratio,
+        n_trajectories=n_trajectories,
+    )
+
+    fig, ax = plot_max_occupation_1d_x(states)
+    fig.show()
+
+    fig, ax = plot_max_occupation_1d_x(states, unravel=True)
+    fig.show()
+
+    input()
+
+    isf = get_approximate_isf_max_x(states, (0.1,))
+    fig, ax = cast(tuple[Figure, Axes], plt.subplots())
+    ax.errorbar(y=isf["data"], x=isf["basis"].times, yerr=isf["standard_deviation"])
+
+    fig.show()
+
+    input()
+
+
+def plot_isf(
+    system: PeriodicSystem,
+    shape: tuple[_L0Inv],
+    resolution: tuple[_L1Inv],
+    *,
+    dt_ratio: float = 500,
+    n: int = 800,
+    step: int = 4000,
+) -> None:
+    states = get_stochastic_evolution(
+        system,
+        shape,
+        resolution,
+        n=n,
+        step=step,
         dt_ratio=dt_ratio,
     )
 
@@ -348,10 +380,8 @@ def plot_stochastic_occupation(
 
     fig2, ax2, line = plot_average_band_occupation(hamiltonian, states)
 
-    eigenstates = calculate_eigenvectors_hermitian(hamiltonian)
-
     for ax in [ax0, ax1, ax2]:
-        _, _, line = plot_eigenstate_occupations(eigenstates, 150, ax=ax)
+        _, _, line = plot_eigenstate_occupations(hamiltonian, 150, ax=ax)
         line.set_linestyle("--")
         line.set_label("Expected")
 
@@ -370,9 +400,7 @@ def plot_thermal_occupation(
 ) -> None:
     hamiltonian = get_hamiltonian(system, shape, resolution)
 
-    eigenstates = calculate_eigenvectors_hermitian(hamiltonian)
-
-    fig, _, _ = plot_eigenstate_occupations(eigenstates, 150)
+    fig, _, _ = plot_eigenstate_occupations(hamiltonian, 150)
 
     fig.show()
     input()

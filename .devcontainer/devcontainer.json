@@ -50,10 +50,12 @@
 					"caldeira_legget_examples",
 					"examples",
 					"tests",
-					"lib/surface_potential_analysis/surface_potential_analysis"
+					"lib/surface_potential_analysis/surface_potential_analysis",
+					"lib/surface_potential_analysis/lib/sse_solver/sse_solver_py/sse_solver_py"
 				],
 				"python.analysis.extraPaths": [
-					"lib/surface_potential_analysis"
+					"lib/surface_potential_analysis",
+					"lib/surface_potential_analysis/lib/sse_solver/sse_solver_py"
 				],
 				"python.analysis.autoImportCompletions": true,
 				"cSpell.allowCompoundWords": true,
