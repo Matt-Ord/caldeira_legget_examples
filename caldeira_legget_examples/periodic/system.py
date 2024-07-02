@@ -4,41 +4,31 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 import numpy as np
-from scipy.constants import electron_volt
+from scipy.constants import Boltzmann, electron_volt, hbar
 from surface_potential_analysis.basis.basis import (
     FundamentalBasis,
-    FundamentalPositionBasis,
     FundamentalTransformedPositionBasis,
     FundamentalTransformedPositionBasis1d,
+    TransformedPositionBasis,
     TransformedPositionBasis1d,
 )
 from surface_potential_analysis.basis.evenly_spaced_basis import (
     EvenlySpacedTransformedPositionBasis,
 )
 from surface_potential_analysis.basis.stacked_basis import (
-    StackedBasis,
-    StackedBasisLike,
+    TupleBasis,
+    TupleBasisLike,
+    TupleBasisWithLengthLike,
 )
 from surface_potential_analysis.hamiltonian_builder.momentum_basis import (
     total_surface_hamiltonian,
 )
 from surface_potential_analysis.kernel.gaussian import (
-    get_effective_gaussian_noise_kernel,
-)
-from surface_potential_analysis.kernel.gaussian import (
-    get_effective_gaussian_noise_operators as get_noise_operators_generic,
-)
-from surface_potential_analysis.kernel.kernel import (
-    get_noise_operators_sampled,
-)
-from surface_potential_analysis.operator.conversion import (
-    convert_operator_list_to_basis,
-    sample_operator,
+    get_temperature_corrected_effective_gaussian_noise_operators,
 )
 from surface_potential_analysis.potential.conversion import convert_potential_to_basis
 from surface_potential_analysis.stacked_basis.conversion import (
     stacked_basis_as_fundamental_momentum_basis,
-    stacked_basis_as_fundamental_position_basis,
 )
 
 from caldeira_legget_examples.util import (
@@ -48,7 +38,6 @@ from caldeira_legget_examples.util import (
 
 if TYPE_CHECKING:
     from surface_potential_analysis.kernel.kernel import (
-        SingleBasisDiagonalNoiseKernel,
         SingleBasisNoiseOperatorList,
     )
     from surface_potential_analysis.operator.operator import SingleBasisOperator
@@ -70,8 +59,18 @@ class PeriodicSystem:
     gamma: float
 
     @property
-    def eta(self) -> float:  # noqa: D102, ANN101
+    def eta(self) -> float:  # noqa: D102
         return get_eta(self.gamma, self.mass)
+
+
+@dataclass
+class PeriodicSystemConfig:
+    """Configure the simlation-specific detail of the system."""
+
+    shape: tuple[int]
+    resolution: tuple[int]
+    n_states: tuple[int]
+    temperature: float
 
 
 SODIUM_COPPER_SYSTEM = PeriodicSystem(
@@ -90,6 +89,14 @@ LITHIUM_COPPER_SYSTEM = PeriodicSystem(
     gamma=1.2e12,
 )
 
+FREE_LITHIUM_SYSTEM = PeriodicSystem(
+    id="LiFree",
+    barrier_energy=0,
+    lattice_constant=3.615e-10,
+    mass=1.152414898e-26,
+    gamma=1.2e12,
+)
+
 HYDROGEN_NICKEL_SYSTEM = PeriodicSystem(
     id="HNi",
     barrier_energy=55e-3 * electron_volt,  # TODO: find energy
@@ -98,25 +105,38 @@ HYDROGEN_NICKEL_SYSTEM = PeriodicSystem(
     gamma=0.2e12,
 )
 
+# A free particle, designed to be ran at T=2 hbar / K
+FREE_SYSTEM = PeriodicSystem(
+    id="Free",
+    barrier_energy=0,
+    lattice_constant=1,
+    mass=(hbar) ** 2,
+    gamma=1 / hbar * 100,
+)
+
+
+def get_dimensionless_temperature(system: PeriodicSystem) -> float:
+    return (
+        hbar**2 * (2 * np.pi / system.lattice_constant) ** 2 / (system.mass * Boltzmann)
+    )
+
 
 def get_potential(
     system: PeriodicSystem,
-) -> Potential[StackedBasis[FundamentalTransformedPositionBasis1d[Literal[3]]]]:
-    delta_x = np.sqrt(3) * system.lattice_constant / 2
+) -> Potential[TupleBasis[FundamentalTransformedPositionBasis1d[Literal[3]]]]:
+    delta_x = np.sqrt(3) * system.lattice_constant / 2  # TODO: this is a bug...
     axis = FundamentalTransformedPositionBasis1d[Literal[3]](np.array([delta_x]), 3)
     vector = 0.25 * system.barrier_energy * np.array([2, -1, -1]) * np.sqrt(3)
-    return {"basis": StackedBasis(axis), "data": vector}
+    return {"basis": TupleBasis(axis), "data": vector}
 
 
 def get_interpolated_potential(
     system: PeriodicSystem,
     resolution: tuple[_L0Inv],
-) -> Potential[
-    StackedBasisLike[FundamentalTransformedPositionBasis[_L0Inv, Literal[1]]]
-]:
+) -> Potential[TupleBasisLike[FundamentalTransformedPositionBasis[_L0Inv, Literal[1]]]]:
     potential = get_potential(system)
     old = potential["basis"][0]
-    basis = StackedBasis(
+    basis = TupleBasis(
         TransformedPositionBasis1d[_L0Inv, Literal[3]](
             old.delta_x,
             old.n,
@@ -130,18 +150,34 @@ def get_interpolated_potential(
     )
 
 
+def get_basis(
+    system: PeriodicSystem,
+    config: PeriodicSystemConfig,
+) -> TupleBasisWithLengthLike[TransformedPositionBasis[int, int, Literal[1]]]:
+    return TupleBasis[TransformedPositionBasis[int, int, Literal[1]]](
+        *tuple(
+            TransformedPositionBasis[int, int, Literal[1]](
+                np.array([np.sqrt(3) * s * system.lattice_constant / 2]),
+                s * n,
+                s * r,
+            )
+            for (s, n, r) in zip(config.shape, config.n_states, config.resolution)
+        ),
+    )
+
+
 def get_extended_interpolated_potential(
     system: PeriodicSystem,
     shape: tuple[_L0Inv],
     resolution: tuple[_L1Inv],
 ) -> Potential[
-    StackedBasisLike[
+    TupleBasisWithLengthLike[
         EvenlySpacedTransformedPositionBasis[_L1Inv, _L0Inv, Literal[0], Literal[1]]
     ]
 ]:
     interpolated = get_interpolated_potential(system, resolution)
     old = interpolated["basis"][0]
-    basis = StackedBasis(
+    basis = TupleBasis(
         EvenlySpacedTransformedPositionBasis[_L1Inv, _L0Inv, Literal[0], Literal[1]](
             old.delta_x * shape[0],
             n=old.n,
@@ -159,104 +195,69 @@ def get_extended_interpolated_potential(
 
 def get_hamiltonian(
     system: PeriodicSystem,
-    shape: tuple[_L0Inv],
-    resolution: tuple[_L0Inv],
-) -> SingleBasisOperator[StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],]:
-    potential = get_extended_interpolated_potential(system, shape, (resolution[0] + 2,))
-    converted = convert_potential_to_basis(
-        potential,
-        stacked_basis_as_fundamental_position_basis(potential["basis"]),
-    )
-    return sample_operator(
-        total_surface_hamiltonian(converted, system.mass, np.array([0])),
-        sample=tuple(s * r for s, r in zip(shape, resolution, strict=True)),
-    )
-
-
-def get_noise_operator(
-    system: PeriodicSystem,
-    shape: tuple[_L0Inv],
-    resolution: tuple[_L0Inv],
-    temperature: float,
-) -> SingleBasisOperator[StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]]]:
-    hamiltonain = get_hamiltonian(system, shape, resolution)
-    return get_caldeira_leggett_noise_operator(
-        hamiltonain["basis"][0],
-        system.mass,
-        temperature,
-        system.gamma,
-    )
-
-
-def get_noise_kernel(
-    system: PeriodicSystem,
-    shape: tuple[_L0Inv],
-    resolution: tuple[_L0Inv],
-    temperature: float,
-) -> SingleBasisDiagonalNoiseKernel[
-    StackedBasisLike[FundamentalPositionBasis[Any, Literal[1]]],
+    config: PeriodicSystemConfig,
+) -> SingleBasisOperator[
+    TupleBasisWithLengthLike[TransformedPositionBasis[int, int, Literal[1]]],
 ]:
-    hamiltonian = get_hamiltonian(system, shape, resolution)
-    return get_effective_gaussian_noise_kernel(
-        hamiltonian["basis"][0],
-        system.eta,
-        temperature,
+    potential = get_extended_interpolated_potential(
+        system,
+        config.shape,
+        config.resolution,
     )
+    basis = get_basis(system, config)
+    converted = convert_potential_to_basis(potential, basis)
+    return total_surface_hamiltonian(converted, system.mass, np.array([0]))
 
 
 def _get_noise_operators_standard(
     system: PeriodicSystem,
-    shape: tuple[_L0Inv],
-    resolution: tuple[_L0Inv],
-    temperature: float,
+    config: PeriodicSystemConfig,
 ) -> SingleBasisNoiseOperatorList[
     FundamentalBasis[int],
-    StackedBasisLike[FundamentalPositionBasis[Any, Literal[1]]],
+    TupleBasisWithLengthLike[TransformedPositionBasis[int, int, Literal[1]]],
 ]:
-    hamiltonian = get_hamiltonian(system, shape, resolution)
-    return get_noise_operators_generic(
+    hamiltonian = get_hamiltonian(system, config)
+    return get_temperature_corrected_effective_gaussian_noise_operators(
         hamiltonian,
         system.eta,
-        temperature,
+        config.temperature,
     )
 
 
-def _get_noise_operators_corrected(
+def _get_noise_operators_linear(
     system: PeriodicSystem,
-    shape: tuple[_L0Inv],
-    resolution: tuple[_L0Inv],
-    temperature: float,
+    config: PeriodicSystemConfig,
 ) -> SingleBasisNoiseOperatorList[
     FundamentalBasis[int],
-    StackedBasisLike[FundamentalPositionBasis[Any, Literal[1]]],
+    TupleBasisWithLengthLike[TransformedPositionBasis[int, int, Literal[1]]],
 ]:
-    full_operators = _get_noise_operators_standard(
-        system,
-        shape,
-        (resolution[0] * 2,),
-        temperature,
+    hamiltonain = get_hamiltonian(system, config)
+    operator = get_caldeira_leggett_noise_operator(
+        hamiltonain["basis"][0],
+        system.mass,
+        config.temperature,
+        system.gamma,
     )
-    sampled_operators = get_noise_operators_sampled(full_operators)
-    hamiltonian = get_hamiltonian(system, shape, resolution)
-    converted = convert_operator_list_to_basis(sampled_operators, hamiltonian["basis"])
     return {
-        "basis": converted["basis"],
-        "data": converted["data"],
-        "eigenvalue": sampled_operators["eigenvalue"],
+        "basis": TupleBasis(FundamentalBasis(1), operator["basis"]),
+        "data": operator["data"],
+        "eigenvalue": np.array([1], dtype=np.complex128),
     }
 
 
 def get_noise_operators(
     system: PeriodicSystem,
-    shape: tuple[_L0Inv],
-    resolution: tuple[_L0Inv],
-    temperature: float,
+    config: PeriodicSystemConfig,
     *,
-    corrected: bool = True,
+    ty: Literal["standard", "linear"] = "standard",
 ) -> SingleBasisNoiseOperatorList[
     FundamentalBasis[int],
-    StackedBasisLike[FundamentalPositionBasis[Any, Literal[1]]],
+    TupleBasisWithLengthLike[TransformedPositionBasis[Any, Any, Literal[1]]],
 ]:
-    if corrected:
-        return _get_noise_operators_corrected(system, shape, resolution, temperature)
-    return _get_noise_operators_standard(system, shape, resolution, temperature)
+    match ty:
+        case "standard":
+            return _get_noise_operators_standard(system, config)
+        case "linear":
+            return _get_noise_operators_linear(system, config)
+    msg = "Invalid ty provided"
+    raise TypeError(msg)

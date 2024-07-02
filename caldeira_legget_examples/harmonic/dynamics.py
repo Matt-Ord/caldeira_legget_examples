@@ -36,7 +36,8 @@ if TYPE_CHECKING:
     )
     from surface_potential_analysis.basis.basis_like import BasisWithLengthLike
     from surface_potential_analysis.basis.stacked_basis import (
-        StackedBasisLike,
+        TupleBasisLike,
+        TupleBasisWithLengthLike,
     )
     from surface_potential_analysis.state_vector.state_vector import (
         StateVector,
@@ -47,7 +48,7 @@ if TYPE_CHECKING:
 
     _B0Inv = TypeVar(
         "_B0Inv",
-        bound=StackedBasisLike[BasisWithLengthLike[Any, Any, Literal[1]]],
+        bound=TupleBasisWithLengthLike[BasisWithLengthLike[Any, Any, Literal[1]]],
     )
 
 
@@ -65,11 +66,11 @@ def get_initial_state(basis: _B0Inv) -> StateVector[_B0Inv]:
 
 def get_coherent_evolution() -> (
     StateVectorList[
-        StackedBasisLike[
+        TupleBasisLike[
             FundamentalBasis[Literal[1]],
             EvenlySpacedTimeBasis[int, int, int],
         ],
-        StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],
+        TupleBasisLike[FundamentalPositionBasis[int, Literal[1]]],
     ]
 ):
     hamiltonian = get_hamiltonian(100)
@@ -81,11 +82,11 @@ def get_coherent_evolution() -> (
 
 def get_coherent_evolution_decomposition() -> (
     StateVectorList[
-        StackedBasisLike[
+        TupleBasisLike[
             FundamentalBasis[Literal[1]],
             EvenlySpacedTimeBasis[int, int, int],
         ],
-        StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],
+        TupleBasisLike[FundamentalPositionBasis[int, Literal[1]]],
     ]
 ):
     hamiltonian = get_hamiltonian(100)
@@ -101,11 +102,11 @@ def get_coherent_evolution_decomposition() -> (
 )
 def get_stochastic_evolution() -> (
     StateVectorList[
-        StackedBasisLike[
+        TupleBasisLike[
             FundamentalBasis[Literal[1]],
             EvenlySpacedTimeBasis[int, int, int],
         ],
-        StackedBasisLike[FundamentalPositionBasis[int, Literal[1]]],
+        TupleBasisLike[FundamentalPositionBasis[int, Literal[1]]],
     ]
 ):
     hamiltonian = get_hamiltonian(200)

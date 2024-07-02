@@ -8,8 +8,9 @@ from surface_potential_analysis.basis.basis import (
     FundamentalPositionBasis,
 )
 from surface_potential_analysis.basis.stacked_basis import (
-    StackedBasis,
-    StackedBasisLike,
+    TupleBasis,
+    TupleBasisLike,
+    TupleBasisWithLengthLike,
 )
 from surface_potential_analysis.basis.util import (
     BasisUtil,
@@ -29,7 +30,7 @@ if TYPE_CHECKING:
 
     _B0Inv = TypeVar(
         "_B0Inv",
-        bound=StackedBasisLike[BasisWithLengthLike[Any, Any, Literal[1]]],
+        bound=TupleBasisWithLengthLike[BasisWithLengthLike[Any, Any, Literal[1]]],
     )
     _L0Inv = TypeVar("_L0Inv", bound=int)
 
@@ -40,8 +41,8 @@ ATOM_GAMMA = 1e-2 / hbar
 
 def get_potential(
     size: _L0Inv,
-) -> Potential[StackedBasisLike[FundamentalPositionBasis[_L0Inv, Literal[1]]]]:
-    basis = StackedBasis(FundamentalPositionBasis(np.array([50]), size))
+) -> Potential[TupleBasisWithLengthLike[FundamentalPositionBasis[_L0Inv, Literal[1]]]]:
+    basis = TupleBasis(FundamentalPositionBasis(np.array([50]), size))
 
     data = np.zeros(basis.shape, dtype=np.complex128)
     data = (
@@ -56,9 +57,7 @@ def get_potential(
 
 def get_hamiltonian(
     size: _L0Inv,
-) -> SingleBasisOperator[
-    StackedBasisLike[FundamentalPositionBasis[_L0Inv, Literal[1]]]
-]:
+) -> SingleBasisOperator[TupleBasisLike[FundamentalPositionBasis[_L0Inv, Literal[1]]]]:
     potential = get_potential(size)
     return total_surface_hamiltonian(potential, ATOM_MASS, np.array([0]))
 

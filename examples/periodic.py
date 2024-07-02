@@ -3,26 +3,34 @@ from caldeira_legget_examples.periodic.plot import (
     plot_stochastic_occupation,
 )
 from caldeira_legget_examples.periodic.system import (
-    LITHIUM_COPPER_SYSTEM,
+    FREE_SYSTEM,
+    PeriodicSystemConfig,
+    get_dimensionless_temperature,
 )
 
 if __name__ == "__main__":
-    system = LITHIUM_COPPER_SYSTEM
-    size = (3,)
-    resolution = (21,)
-    n_trajectories = 6
+    system = FREE_SYSTEM
+    config = PeriodicSystemConfig(
+        shape=(3,),
+        resolution=(21,),
+        n_states=(11,),
+        temperature=get_dimensionless_temperature(system),
+    )
 
-    dt_ratio, step, n = 500, 300, 204800  # takes about 30min
-    # dt_ratio, step, n = 500, 2500, 102400  # takes about 3.1h, good for long timescale behavior
-    # dt_ratio, step, n = 500, 2500, 51200
-    # dt_ratio, step, n = 500, 2500, 640  # Small timestep, hopping dt = 3200
-    # dt_ratio, step, n = 80, 200, 640 # Large timestep, hopping dt = 1600
-    # dt_ratio, step, n = 500, 1250, 640 # Small timestep, no hopping dt = 1600
+    # takes about 30min
+    # !dt_ratio, step, n = 500, 300, 204800
+    # takes about 3.1h, 5.2h when 6 trajectories good for long timescale behavior
+    # !dt_ratio, step, n = 500, 2500, 102400
+
+    n_trajectories, dt_ratio, step, n = 3, 500, 2500, 50000
+    # !dt_ratio, step, n = 500, 2500, 51200
+    # !dt_ratio, step, n = 500, 2500, 640  # Small timestep, hopping dt = 3200
+    # !dt_ratio, step, n = 80, 200, 640 # Large timestep, hopping dt = 1600
+    # !dt_ratio, step, n = 500, 1250, 640 # Small timestep, no hopping dt = 1600
 
     plot_point_evolution(
         system,
-        size,
-        resolution,
+        config,
         dt_ratio=dt_ratio,
         step=step,
         n=n,
@@ -30,8 +38,7 @@ if __name__ == "__main__":
     )
     plot_stochastic_occupation(
         system,
-        size,
-        resolution,
+        config,
         dt_ratio=dt_ratio,
         step=step,
         n=n,
