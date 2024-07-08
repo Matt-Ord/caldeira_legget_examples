@@ -160,7 +160,6 @@ def get_stochastic_evolution(
     operator_list = list[SingleBasisOperator[Any]]()
     args = np.argsort(np.abs(operators["eigenvalue"]))[::-1]
 
-    print(operators["basis"])  # noqa: T201
     print("Collapse Operators")  # noqa: T201
     print("------------------")  # noqa: T201
     for idx in args[1:7]:

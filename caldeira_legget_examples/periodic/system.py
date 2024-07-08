@@ -17,7 +17,6 @@ from surface_potential_analysis.basis.evenly_spaced_basis import (
 )
 from surface_potential_analysis.basis.stacked_basis import (
     TupleBasis,
-    TupleBasisLike,
     TupleBasisWithLengthLike,
 )
 from surface_potential_analysis.hamiltonian_builder.momentum_basis import (
@@ -105,13 +104,13 @@ HYDROGEN_NICKEL_SYSTEM = PeriodicSystem(
     gamma=0.2e12,
 )
 
-# A free particle, designed to be ran at T=2 hbar / K
+# A free particle, designed to be ran at T=get_dimensionless_temperature
 FREE_SYSTEM = PeriodicSystem(
-    id="Free",
+    id="Free1",
     barrier_energy=0,
     lattice_constant=1,
     mass=(hbar) ** 2,
-    gamma=1 / hbar * 100,
+    gamma=1 / hbar,
 )
 
 
@@ -133,7 +132,9 @@ def get_potential(
 def get_interpolated_potential(
     system: PeriodicSystem,
     resolution: tuple[_L0Inv],
-) -> Potential[TupleBasisLike[FundamentalTransformedPositionBasis[_L0Inv, Literal[1]]]]:
+) -> Potential[
+    TupleBasisWithLengthLike[FundamentalTransformedPositionBasis[_L0Inv, Literal[1]]]
+]:
     potential = get_potential(system)
     old = potential["basis"][0]
     basis = TupleBasis(

@@ -5,6 +5,7 @@ from typing import TypeVar
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.lines import Line2D
+from scipy.constants import Boltzmann, hbar
 from surface_potential_analysis.basis.stacked_basis import (
     TupleBasis,
 )
@@ -12,8 +13,9 @@ from surface_potential_analysis.kernel.conversion import (
     convert_noise_operator_list_to_basis,
 )
 from surface_potential_analysis.kernel.kernel import (
-    as_diagonal_kernel,
-    get_noise_kernel,
+    as_diagonal_noise_operators,
+    get_diagonal_noise_kernel,
+    truncate_diagonal_noise_operators,
 )
 from surface_potential_analysis.kernel.plot import (
     plot_diagonal_kernel,
@@ -48,9 +50,15 @@ from surface_potential_analysis.state_vector.plot import (
     animate_state_over_list_1d_x,
     plot_average_band_occupation,
     plot_average_displacement_1d_x,
+    plot_k_distribution_1d,
     plot_periodic_averaged_occupation_1d_x,
+    plot_spread_1d,
+    plot_spread_against_k,
+    plot_spread_against_x,
+    plot_spread_distribution_1d,
     plot_state_1d_k,
     plot_state_1d_x,
+    plot_x_distribution_1d,
 )
 from surface_potential_analysis.state_vector.state_vector_list import (
     get_state_along_axis,
@@ -294,8 +302,72 @@ def plot_point_evolution(
     )
     fig.show()
 
-    fig, ax, _line = plot_average_displacement_1d_x(states)
+    fig, ax, line0 = plot_average_displacement_1d_x(states)
+    line0.set_label("Simulation")
+
+    # Note factor of hbar**2 here...
+    # I think this is due to conventions we use when defining gamma
+    free_rate = 0.5 * Boltzmann * config.temperature / (system.gamma * hbar**2)
+    times = states["basis"][0][1].times
+    (line1,) = ax.plot(times, times * free_rate)
+    line1.set_label("Classical Limit")
+    ax.legend()
+
+    # ax.set_xlim(0, 1e-31)
+    # ax.set_ylim(0, 1000)
     fig.show()
+    input()
+
+
+def plot_gaussian_distribution(
+    system: PeriodicSystem,
+    config: PeriodicSystemConfig,
+    *,
+    dt_ratio: float = 500,
+    n: int = 800,
+    step: int = 4000,
+    n_trajectories: int = 1,
+) -> None:
+    states = get_stochastic_evolution(
+        system,
+        config,
+        n=n,
+        step=step,
+        dt_ratio=dt_ratio,
+        n_trajectories=n_trajectories,
+    )
+
+    fig, ax = plot_spread_1d(states)
+    ax.set_title("Plot of spread against time")
+    fig.show()
+
+    fig, ax = plot_spread_distribution_1d(states)
+    ax.set_title("Plot of spread distribution")
+    fig.show()
+
+    fig, ax = plot_spread_against_k(states)
+    ax.set_title("Plot of spread vs k")
+    fig.show()
+
+    fig, ax = plot_spread_against_x(states)
+    ax.set_title("Plot of spread vs x")
+    fig.show()
+
+    fig, ax = plot_k_distribution_1d(states)
+    ax.set_title("Plot of k distribution")
+    fig.show()
+
+    fig, ax = plot_x_distribution_1d(states)
+    potential = get_extended_interpolated_potential(
+        system,
+        config.shape,
+        config.resolution,
+    )
+    _, _, _ = plot_potential_1d_x(potential, ax=ax.twinx())
+    ax.set_title("Plot of x distribution")
+    fig.tight_layout()
+    fig.show()
+
     input()
 
 
@@ -356,15 +428,23 @@ def plot_kernel(
 ) -> None:
     operators = get_noise_operators(system, config)
     basis_x = stacked_basis_as_fundamental_position_basis(operators["basis"][1][0])
-    converted = convert_noise_operator_list_to_basis(
-        operators,
-        TupleBasis(basis_x, basis_x),
+    converted = as_diagonal_noise_operators(
+        convert_noise_operator_list_to_basis(
+            operators,
+            TupleBasis(basis_x, basis_x),
+        ),
     )
-    kernel = as_diagonal_kernel(get_noise_kernel(converted))
+    kernel = get_diagonal_noise_kernel(converted)
     fig, _, _ = plot_diagonal_kernel(kernel)
     fig.show()
 
-    fig, _ = plot_diagonal_kernel_truncation_error(kernel)
+    truncated = truncate_diagonal_noise_operators(converted, range(7))
+    kernel_error = get_diagonal_noise_kernel(truncated)
+    kernel_error["data"] -= kernel["data"]
+    fig, _, _ = plot_diagonal_kernel(kernel_error)
+    fig.show()
+
+    fig, _, _ = plot_diagonal_kernel_truncation_error(kernel)
     fig.show()
 
     input()
@@ -458,14 +538,7 @@ def plot_kernel_eigenvalues(
         config,
         ty="standard",
     )
-    fig, ax, _ = plot_diagonal_noise_operators_eigenvalues(operators)
-
-    operators = get_noise_operators(
-        system,
-        config,
-        ty="corrected",
-    )
-    fig, _, _ = plot_diagonal_noise_operators_eigenvalues(operators, ax=ax)
+    fig, _ax, _ = plot_diagonal_noise_operators_eigenvalues(operators)
 
     fig.show()
 
@@ -481,11 +554,7 @@ def plot_collapse_operator_1d(
         config,
         ty="standard",
     )
-    operators_corrected = get_noise_operators(
-        system,
-        config,
-        ty="corrected",
-    )
+
     args = np.argsort(np.abs(operators["eigenvalue"]))[::-1]
 
     x_basis = stacked_basis_as_fundamental_position_basis(
@@ -494,22 +563,14 @@ def plot_collapse_operator_1d(
 
     for idx in args[7:8]:
         operator = select_operator(operators, idx=idx)
-        operator_corrected = select_operator(operators_corrected, idx=idx)
         operator_x = convert_operator_to_basis(
             operator,
-            TupleBasis(x_basis, x_basis),
-        )
-        operator_corrected_x = convert_operator_to_basis(
-            operator_corrected,
             TupleBasis(x_basis, x_basis),
         )
 
         fig, ax, line = plot_operator_along_diagonal(operator_x, measure="abs")
         line.set_label("standard operator")
         fig.show()
-
-        fig, _, line = plot_operator_along_diagonal(operator_corrected_x, measure="abs")
-        line.set_label("corrected operator")
 
         ax.legend()
         fig.show()
@@ -526,11 +587,6 @@ def plot_collapse_operator_2d(
         config,
         ty="standard",
     )
-    operators_corrected = get_noise_operators(
-        system,
-        config,
-        ty="corrected",
-    )
     args = np.argsort(np.abs(operators["eigenvalue"]))[::-1]
 
     k_basis = stacked_basis_as_fundamental_momentum_basis(
@@ -539,23 +595,16 @@ def plot_collapse_operator_2d(
 
     for idx in args[:4]:
         operator = select_operator(operators, idx=idx)
-        operator_corrected = select_operator(operators_corrected, idx=idx)
         operator_k = convert_operator_to_basis(
             operator,
             TupleBasis(k_basis, k_basis),
         )
-        operator_corrected_k = convert_operator_to_basis(
-            operator_corrected,
-            TupleBasis(k_basis, k_basis),
-        )
 
         fig, ax = plot_operator_sparsity(operator_k)
-        _, _ = plot_operator_sparsity(operator_corrected_k, ax=ax)
         ax.set_title("Operator sparsity in K")
         fig.show()
 
         fig, ax = plot_operator_diagonal_sparsity(operator_k)
-        _, _ = plot_operator_diagonal_sparsity(operator_corrected_k, ax=ax)
         ax.set_title("Operator diagonal sparsity in K")
         fig.show()
 
@@ -567,7 +616,6 @@ def plot_collapse_operator_2d(
         ax.set_title(f"standard operator original basis, idx={idx}")
         fig.show()
 
-        fig, ax, _ = plot_operator_2d(operator_corrected_k, measure="abs")
         ax.set_title(f"corrected operator, idx={idx}")
         fig.show()
 
@@ -592,7 +640,7 @@ def plot_effective_potential(
     fig, _, line = plot_noise_operators_single_sample_x(
         standard_operators,
         ax=ax[1],
-        truncation=15,
+        truncation=range(3),
     )
     line.set_label("standard")
 
