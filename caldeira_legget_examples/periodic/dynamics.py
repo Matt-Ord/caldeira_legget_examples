@@ -162,7 +162,7 @@ def get_stochastic_evolution(
 
     print("Collapse Operators")  # noqa: T201
     print("------------------")  # noqa: T201
-    for idx in args[1:7]:
+    for idx in args[1:5]:
         operator = select_operator(
             operators,
             idx=idx,

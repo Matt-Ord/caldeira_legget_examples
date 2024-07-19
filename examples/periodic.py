@@ -1,4 +1,5 @@
 from caldeira_legget_examples.periodic.plot import (
+    plot_coherent_state,
     plot_gaussian_distribution,
     plot_point_evolution,
     plot_stochastic_evolution,
@@ -13,10 +14,10 @@ from caldeira_legget_examples.periodic.system import (
 if __name__ == "__main__":
     system = FREE_SYSTEM
     config = PeriodicSystemConfig(
-        shape=(8,),
-        resolution=(31,),
-        n_states=(15,),
-        temperature=get_dimensionless_temperature(system),
+        shape=(60,),
+        resolution=(20,),
+        n_states=(20,),
+        temperature=2 * get_dimensionless_temperature(system),
     )
     print(system.gamma)
 
@@ -26,7 +27,7 @@ if __name__ == "__main__":
     # !dt_ratio, step, n = 500, 2500, 102400
 
     # n_trajectories, dt_ratio, step, n = 6, 500, 10000, 102400
-    n_trajectories, dt_ratio, step, n = 6, 500, 5000, 20000
+    n_trajectories, dt_ratio, step, n = 6, 500, 5000, 20002
     # n_trajectories, dt_ratio, step, n = 6, 500, 2500, 5000
     # !dt_ratio, step, n = 500, 2500, 51200
     # !dt_ratio, step, n = 500, 2500, 640  # Small timestep, hopping dt = 3200
@@ -35,6 +36,8 @@ if __name__ == "__main__":
 
     # plot_kernel(system, config)
     # plot_effective_potential(system, config)
+
+    plot_coherent_state(system, config)
 
     plot_gaussian_distribution(
         system,
