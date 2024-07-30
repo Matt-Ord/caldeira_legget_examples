@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, Self, TypeVar
 
 import numpy as np
 from scipy.constants import hbar
@@ -61,10 +62,6 @@ if TYPE_CHECKING:
     )
 
 
-_L0Inv = TypeVar("_L0Inv", bound=int)
-_L1Inv = TypeVar("_L1Inv", bound=int)
-
-
 def get_initial_state(basis: _B0Inv) -> StateVector[_B0Inv]:
     data = np.zeros(basis.fundamental_n, dtype=np.complex128)
     util = BasisUtil(basis)
@@ -116,17 +113,34 @@ def get_coherent_evolution_decomposition(
     )
 
 
+@dataclass
+class PeriodicSimulationConfig:
+    """Simulation specific config."""
+
+    n: int
+    step: int
+    dt_ratio: float = 500
+    n_trajectories: int = 1
+    n_realizations: int = 1
+
+    def __hash__(self: Self) -> int:
+        """Generate a hash."""
+        return hash((
+            self.n,
+            self.step,
+            self.dt_ratio,
+            self.n_realizations,
+            self.n_trajectories,
+        ))
+
+
 def _get_stochastic_evolution_cache(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
-    *,
-    n: int,
-    step: int,
-    dt_ratio: float = 500,
-    n_trajectories: int = 1,
+    simulation_config: PeriodicSimulationConfig,
 ) -> Path:
     return Path(
-        f"examples/data/{system.id}/stochastic.{config.shape[0]}.{config.resolution[0]}.{n}.{step}.{dt_ratio}.{n_trajectories}.{config.temperature}K.npz",
+        f"examples/data/{system.id}/stochastic.{config.shape[0]}.{config.resolution[0]}.{hash(simulation_config)}.{config.temperature}K.npz",
     )
 
 
@@ -138,11 +152,7 @@ def _get_stochastic_evolution_cache(
 def get_stochastic_evolution(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
-    *,
-    n: int,
-    step: int,
-    dt_ratio: float = 500,
-    n_trajectories: int = 1,
+    simulation_config: PeriodicSimulationConfig,
 ) -> StateVectorList[
     TupleBasisLike[
         FundamentalBasis[int],
@@ -153,8 +163,13 @@ def get_stochastic_evolution(
     hamiltonian = get_hamiltonian(system, config)
 
     initial_state = get_initial_state(hamiltonian["basis"][0])
-    dt = hbar / (np.max(np.abs(hamiltonian["data"])) * dt_ratio)
-    times = EvenlySpacedTimeBasis(n, step, 0, n * step * dt)
+    dt = hbar / (np.max(np.abs(hamiltonian["data"])) * simulation_config.dt_ratio)
+    times = EvenlySpacedTimeBasis(
+        simulation_config.n,
+        simulation_config.step,
+        0,
+        simulation_config.n * simulation_config.step * dt,
+    )
 
     operators = get_noise_operators(system, config)
     operator_list = list[SingleBasisOperator[Any]]()
@@ -176,15 +191,20 @@ def get_stochastic_evolution(
     print("Coherent Operator")  # noqa: T201
     print("------------------")  # noqa: T201
     print(f"{np.max(np.abs(hamiltonian['data'])):e}")  # noqa: T201
+
+    print(f"dt = {times.fundamental_dt}")  # noqa: T201
     # This is roughly the number of timesteps per full rotation of phase
     # should be much less than 1...
-    print(times.fundamental_dt * np.max(np.abs(hamiltonian["data"])) / hbar)  # noqa: T201
+    print(  # noqa: T201
+        f"ratio = {times.fundamental_dt * np.max(np.abs(hamiltonian['data'])) / hbar}",
+    )
 
     return solve_stochastic_schrodinger_equation_rust_banded(
         initial_state,
         times,
         hamiltonian,
         operator_list,
-        n_trajectories=n_trajectories,
+        n_trajectories=simulation_config.n_trajectories,
+        n_realizations=simulation_config.n_realizations,
         method="Order2ExplicitWeak",
     )

@@ -68,7 +68,6 @@ class PeriodicSystemConfig:
 
     shape: tuple[int]
     resolution: tuple[int]
-    n_states: tuple[int]
     temperature: float
 
 
@@ -157,12 +156,11 @@ def get_basis(
 ) -> TupleBasisWithLengthLike[TransformedPositionBasis[int, int, Literal[1]]]:
     return TupleBasis[TransformedPositionBasis[int, int, Literal[1]]](
         *tuple(
-            TransformedPositionBasis[int, int, Literal[1]](
+            FundamentalTransformedPositionBasis[int, Literal[1]](
                 np.array([np.sqrt(3) * s * system.lattice_constant / 2]),
-                s * n,
                 s * r,
             )
-            for (s, n, r) in zip(config.shape, config.n_states, config.resolution)
+            for (s, r) in zip(config.shape, config.resolution)
         ),
     )
 

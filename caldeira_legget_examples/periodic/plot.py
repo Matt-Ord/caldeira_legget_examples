@@ -88,6 +88,7 @@ from surface_potential_analysis.state_vector.state_vector_list import (
 )
 
 from .dynamics import (
+    PeriodicSimulationConfig,
     get_coherent_evolution,
     get_coherent_evolution_decomposition,
     get_stochastic_evolution,
@@ -209,11 +210,7 @@ def plot_coherent_evolution_decomposition(
 def plot_stochastic_evolution(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
-    *,
-    dt_ratio: float = 500,
-    n: int = 800,
-    step: int = 4000,
-    n_trajectories: int = 1,
+    simulation_config: PeriodicSimulationConfig,
 ) -> None:
     potential = get_extended_interpolated_potential(
         system,
@@ -225,10 +222,7 @@ def plot_stochastic_evolution(
     all_states = get_stochastic_evolution(
         system,
         config,
-        n=n,
-        step=step,
-        dt_ratio=dt_ratio,
-        n_trajectories=n_trajectories,
+        simulation_config,
     )
 
     states = get_state_along_axis(all_states, axes=(1,), idx=(0,))
@@ -302,19 +296,12 @@ def plot_stochastic_evolution(
 def plot_point_evolution(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
-    *,
-    dt_ratio: float = 500,
-    n: int = 800,
-    step: int = 4000,
-    n_trajectories: int = 1,
+    simulation_config: PeriodicSimulationConfig,
 ) -> None:
     states = get_stochastic_evolution(
         system,
         config,
-        n=n,
-        step=step,
-        dt_ratio=dt_ratio,
-        n_trajectories=n_trajectories,
+        simulation_config,
     )
 
     fig, ax = plot_periodic_averaged_occupation_1d_x(states)
@@ -353,19 +340,12 @@ def plot_point_evolution(
 def plot_gaussian_distribution(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
-    *,
-    dt_ratio: float = 500,
-    n: int = 800,
-    step: int = 4000,
-    n_trajectories: int = 1,
+    simulation_config: PeriodicSimulationConfig,
 ) -> None:
     states = get_stochastic_evolution(
         system,
         config,
-        n=n,
-        step=step,
-        dt_ratio=dt_ratio,
-        n_trajectories=n_trajectories,
+        simulation_config,
     )
 
     fig, ax = plot_spread_1d(states)
@@ -407,19 +387,12 @@ def plot_gaussian_distribution(
 def plot_stochastic_occupation(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
-    *,
-    dt_ratio: float = 500,
-    n: int = 800,
-    step: int = 4000,
-    n_trajectories: int = 1,
+    simulation_config: PeriodicSimulationConfig,
 ) -> None:
     states = get_stochastic_evolution(
         system,
         config,
-        n=n,
-        step=step,
-        dt_ratio=dt_ratio,
-        n_trajectories=n_trajectories,
+        simulation_config,
     )
     hamiltonian = get_hamiltonian(system, config)
 
