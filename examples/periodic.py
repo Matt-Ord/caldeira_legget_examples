@@ -2,6 +2,7 @@ from caldeira_legget_examples.periodic.dynamics import PeriodicSimulationConfig
 from caldeira_legget_examples.periodic.plot import (
     plot_coherent_state,
     plot_gaussian_distribution,
+    plot_kernel,
     plot_point_evolution,
     plot_stochastic_evolution,
     plot_stochastic_occupation,
@@ -15,8 +16,8 @@ from caldeira_legget_examples.periodic.system import (
 if __name__ == "__main__":
     system = FREE_SYSTEM
     system_config = PeriodicSystemConfig(
-        shape=(60,),
-        resolution=(20,),
+        shape=(5,),
+        resolution=(21,),
         temperature=2 * get_dimensionless_temperature(system),
     )
 
@@ -34,6 +35,8 @@ if __name__ == "__main__":
     # !dt_ratio, step, n = 500, 2500, 640  # Small timestep, hopping dt = 3200
     # !dt_ratio, step, n = 80, 200, 640 # Large timestep, hopping dt = 1600
     # !dt_ratio, step, n = 500, 1250, 640 # Small timestep, no hopping dt = 1600
+
+    plot_kernel(system, system_config)
 
     plot_coherent_state(system, system_config)
 

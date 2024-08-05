@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Iterable, Literal, TypeVar
 
 import numpy as np
 from scipy.constants import Boltzmann, electron_volt, hbar
@@ -69,6 +69,7 @@ class PeriodicSystemConfig:
     shape: tuple[int]
     resolution: tuple[int]
     temperature: float
+    operator_truncation: Iterable[int] | None = None
 
 
 SODIUM_COPPER_SYSTEM = PeriodicSystem(
@@ -220,6 +221,7 @@ def _get_noise_operators_standard(
         hamiltonian,
         system.eta,
         config.temperature,
+        truncation=config.operator_truncation,
     )
 
 

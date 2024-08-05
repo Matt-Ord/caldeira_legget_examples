@@ -37,15 +37,6 @@
 				},
 				"python.analysis.diagnosticMode": "workspace",
 				"python.analysis.typeCheckingMode": "strict",
-				"python.testing.unittestArgs": [
-					"-v",
-					"-s",
-					"./lib/surface_potential_analysis/tests",
-					"-p",
-					"*_test.py"
-				],
-				"python.testing.pytestEnabled": false,
-				"python.testing.unittestEnabled": true,
 				"python.analysis.include": [
 					"caldeira_legget_examples",
 					"examples",
@@ -58,6 +49,15 @@
 					"lib/surface_potential_analysis/lib/sse_solver/sse_solver_py"
 				],
 				"python.analysis.autoImportCompletions": true,
+				"python.testing.unittestArgs": [
+					"-v",
+					"-s",
+					"./lib/surface_potential_analysis/tests",
+					"-p",
+					"*_test.py"
+				],
+				"python.testing.pytestEnabled": false,
+				"python.testing.unittestEnabled": true,
 				"cSpell.allowCompoundWords": true,
 				"cSpell.flagWords": [
 					"hte",

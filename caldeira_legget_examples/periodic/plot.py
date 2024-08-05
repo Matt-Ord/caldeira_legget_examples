@@ -19,15 +19,21 @@ from surface_potential_analysis.basis.util import get_displacements_nx
 from surface_potential_analysis.kernel.conversion import (
     convert_noise_operator_list_to_basis,
 )
+from surface_potential_analysis.kernel.gaussian import (
+    get_effective_gaussian_isotropic_noise_kernel,
+)
 from surface_potential_analysis.kernel.kernel import (
     as_diagonal_noise_operators,
+    as_isotropic_kernel,
     get_diagonal_noise_kernel,
+    get_noise_operators_real_isotropic,
     truncate_diagonal_noise_operators,
 )
 from surface_potential_analysis.kernel.plot import (
     plot_diagonal_kernel,
     plot_diagonal_kernel_truncation_error,
     plot_diagonal_noise_operators_eigenvalues,
+    plot_isotropic_noise_kernel_1d_x,
     plot_noise_operators_single_sample_x,
 )
 from surface_potential_analysis.operator.conversion import (
@@ -432,6 +438,41 @@ def plot_kernel(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
 ) -> None:
+    hamiltonian = get_hamiltonian(system, config)
+    a = get_effective_gaussian_isotropic_noise_kernel(
+        hamiltonian["basis"][0],
+        system.eta,
+        config.temperature,
+    )
+    b = get_noise_operators_real_isotropic(a)
+    kernel = get_diagonal_noise_kernel(b)
+    fig, ax, _ = plot_diagonal_kernel(kernel)
+    ax.set_title("noise kernel from isotropic without T correction")
+    fig.show()
+
+    cos_kernel = as_isotropic_kernel(get_diagonal_noise_kernel(b))
+    fig, ax, _ = plot_isotropic_noise_kernel_1d_x(
+        cos_kernel,
+        measure="abs",
+    )
+    fig, _, _ = plot_isotropic_noise_kernel_1d_x(
+        cos_kernel,
+        ax=ax,
+        measure="real",
+    )
+    fig, _, _ = plot_isotropic_noise_kernel_1d_x(
+        cos_kernel,
+        ax=ax,
+        measure="imag",
+    )
+
+    fig, _, line = plot_isotropic_noise_kernel_1d_x(a, ax=ax)
+    line.set_label("actual")
+    line.set_linestyle("--")
+    ax.set_title("noise kernel as fitted")
+    ax.legend()
+    fig.show()
+
     operators = get_noise_operators(system, config)
     basis_x = stacked_basis_as_fundamental_position_basis(operators["basis"][1][0])
     converted = as_diagonal_noise_operators(
@@ -441,16 +482,19 @@ def plot_kernel(
         ),
     )
     kernel = get_diagonal_noise_kernel(converted)
-    fig, _, _ = plot_diagonal_kernel(kernel)
+    fig, ax, _ = plot_diagonal_kernel(kernel)
+    ax.set_title("noise kernel as diagonal")
     fig.show()
 
     truncated = truncate_diagonal_noise_operators(converted, range(5))
     kernel_error = get_diagonal_noise_kernel(truncated)
     kernel_error["data"] -= kernel["data"]
-    fig, _, _ = plot_diagonal_kernel(kernel_error)
+    fig, ax, _ = plot_diagonal_kernel(kernel_error)
+    ax.set_title("truncated noise kernel as diagonal")
     fig.show()
 
-    fig, _, _ = plot_diagonal_kernel_truncation_error(kernel)
+    fig, ax, _ = plot_diagonal_kernel_truncation_error(kernel)
+    ax.set_title("truncated noise kernel error")
     fig.show()
 
     input()
