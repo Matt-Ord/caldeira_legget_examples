@@ -30,7 +30,7 @@ from surface_potential_analysis.state_vector.conversion import (
 from surface_potential_analysis.state_vector.state_vector_list import (
     StateVectorList,
 )
-from surface_potential_analysis.util.decorators import npy_cached_dict, timed
+from surface_potential_analysis.util.decorators import npy_cached_dict
 
 from .system import (
     PeriodicSystem,
@@ -148,7 +148,6 @@ def _get_stochastic_evolution_cache(
     _get_stochastic_evolution_cache,
     load_pickle=True,
 )
-@timed
 def get_stochastic_evolution(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
@@ -177,7 +176,7 @@ def get_stochastic_evolution(
 
     print("Collapse Operators")  # noqa: T201
     print("------------------")  # noqa: T201
-    for idx in args[1:5]:
+    for idx in args:
         operator = select_operator(
             operators,
             idx=idx,
