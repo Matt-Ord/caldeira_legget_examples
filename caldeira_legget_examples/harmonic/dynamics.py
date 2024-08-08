@@ -34,8 +34,8 @@ if TYPE_CHECKING:
         FundamentalBasis,
         FundamentalPositionBasis,
     )
-    from surface_potential_analysis.basis.basis_like import BasisWithLengthLike
     from surface_potential_analysis.basis.stacked_basis import (
+        StackedBasisWithVolumeLike,
         TupleBasisLike,
         TupleBasisWithLengthLike,
     )
@@ -48,7 +48,7 @@ if TYPE_CHECKING:
 
     _B0Inv = TypeVar(
         "_B0Inv",
-        bound=TupleBasisWithLengthLike[BasisWithLengthLike[Any, Any, Literal[1]]],
+        bound=StackedBasisWithVolumeLike[Any, Any, Any],
     )
 
 
@@ -66,11 +66,8 @@ def get_initial_state(basis: _B0Inv) -> StateVector[_B0Inv]:
 
 def get_coherent_evolution() -> (
     StateVectorList[
-        TupleBasisLike[
-            FundamentalBasis[Literal[1]],
-            EvenlySpacedTimeBasis[int, int, int],
-        ],
-        TupleBasisLike[FundamentalPositionBasis[int, Literal[1]]],
+        EvenlySpacedTimeBasis[int, int, int],
+        TupleBasisWithLengthLike[FundamentalPositionBasis[int, Literal[1]]],
     ]
 ):
     hamiltonian = get_hamiltonian(100)
@@ -82,11 +79,8 @@ def get_coherent_evolution() -> (
 
 def get_coherent_evolution_decomposition() -> (
     StateVectorList[
-        TupleBasisLike[
-            FundamentalBasis[Literal[1]],
-            EvenlySpacedTimeBasis[int, int, int],
-        ],
-        TupleBasisLike[FundamentalPositionBasis[int, Literal[1]]],
+        EvenlySpacedTimeBasis[int, int, int],
+        TupleBasisWithLengthLike[FundamentalPositionBasis[int, Literal[1]]],
     ]
 ):
     hamiltonian = get_hamiltonian(100)
@@ -106,7 +100,7 @@ def get_stochastic_evolution() -> (
             FundamentalBasis[Literal[1]],
             EvenlySpacedTimeBasis[int, int, int],
         ],
-        TupleBasisLike[FundamentalPositionBasis[int, Literal[1]]],
+        TupleBasisWithLengthLike[FundamentalPositionBasis[int, Literal[1]]],
     ]
 ):
     hamiltonian = get_hamiltonian(200)

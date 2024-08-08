@@ -8,8 +8,8 @@ from surface_potential_analysis.basis.basis import (
     FundamentalPositionBasis,
 )
 from surface_potential_analysis.basis.stacked_basis import (
+    StackedBasisWithVolumeLike,
     TupleBasis,
-    TupleBasisLike,
     TupleBasisWithLengthLike,
 )
 from surface_potential_analysis.basis.util import (
@@ -22,15 +22,12 @@ from surface_potential_analysis.hamiltonian_builder.momentum_basis import (
 from caldeira_legget_examples.util import get_caldeira_leggett_noise_operator
 
 if TYPE_CHECKING:
-    from surface_potential_analysis.basis.basis_like import (
-        BasisWithLengthLike,
-    )
     from surface_potential_analysis.operator.operator import SingleBasisOperator
     from surface_potential_analysis.potential.potential import Potential
 
     _B0Inv = TypeVar(
         "_B0Inv",
-        bound=TupleBasisWithLengthLike[BasisWithLengthLike[Any, Any, Literal[1]]],
+        bound=StackedBasisWithVolumeLike[Any, Any, Any],
     )
     _L0Inv = TypeVar("_L0Inv", bound=int)
 
@@ -57,7 +54,9 @@ def get_potential(
 
 def get_hamiltonian(
     size: _L0Inv,
-) -> SingleBasisOperator[TupleBasisLike[FundamentalPositionBasis[_L0Inv, Literal[1]]]]:
+) -> SingleBasisOperator[
+    TupleBasisWithLengthLike[FundamentalPositionBasis[_L0Inv, Literal[1]]]
+]:
     potential = get_potential(size)
     return total_surface_hamiltonian(potential, ATOM_MASS, np.array([0]))
 

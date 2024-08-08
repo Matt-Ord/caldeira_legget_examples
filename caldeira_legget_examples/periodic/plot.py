@@ -16,6 +16,9 @@ from surface_potential_analysis.basis.stacked_basis import (
     TupleBasisWithLengthLike,
 )
 from surface_potential_analysis.basis.util import get_displacements_nx
+from surface_potential_analysis.kernel.build import (
+    truncate_diagonal_noise_operator_list,
+)
 from surface_potential_analysis.kernel.conversion import (
     convert_noise_operator_list_to_basis,
 )
@@ -23,18 +26,19 @@ from surface_potential_analysis.kernel.gaussian import (
     get_effective_gaussian_isotropic_noise_kernel,
 )
 from surface_potential_analysis.kernel.kernel import (
-    as_diagonal_noise_operators,
-    as_isotropic_kernel,
-    get_diagonal_noise_kernel,
-    get_noise_operators_real_isotropic,
-    truncate_diagonal_noise_operators,
+    as_diagonal_noise_operators_from_full,
+    as_isotropic_kernel_from_diagonal,
+    get_diagonal_kernel_from_operators,
 )
 from surface_potential_analysis.kernel.plot import (
-    plot_diagonal_kernel,
+    plot_diagonal_kernel_2d,
     plot_diagonal_kernel_truncation_error,
     plot_diagonal_noise_operators_eigenvalues,
     plot_isotropic_noise_kernel_1d_x,
     plot_noise_operators_single_sample_x,
+)
+from surface_potential_analysis.kernel.solve import (
+    get_noise_operators_real_isotropic_fft,
 )
 from surface_potential_analysis.operator.conversion import (
     convert_operator_to_basis,
@@ -74,8 +78,8 @@ from surface_potential_analysis.state_vector.plot import (
     _get_x_operator,
     animate_state_over_list_1d_k,
     animate_state_over_list_1d_x,
-    plot_average_band_occupation,
     plot_average_displacement_1d_x,
+    plot_average_eigenstate_occupation,
     plot_k_distribution_1d,
     plot_periodic_averaged_occupation_1d_x,
     plot_periodic_x_distribution_1d,
@@ -407,7 +411,7 @@ def plot_stochastic_occupation(
     # fig1, ax1 = fig0, ax0
     # fig1, ax1, _ani = animate_all_band_occupations(hamiltonian, states)
 
-    fig2, ax2, line = plot_average_band_occupation(hamiltonian, states)
+    fig2, ax2, line = plot_average_eigenstate_occupation(hamiltonian, states)
 
     for ax in [ax2]:
         _, _, line = plot_eigenstate_occupations(hamiltonian, config.temperature, ax=ax)
@@ -444,13 +448,15 @@ def plot_kernel(
         system.eta,
         config.temperature,
     )
-    b = get_noise_operators_real_isotropic(a)
-    kernel = get_diagonal_noise_kernel(b)
-    fig, ax, _ = plot_diagonal_kernel(kernel)
+    b = get_noise_operators_real_isotropic_fft(a)
+    kernel = get_diagonal_kernel_from_operators(b)
+    fig, ax, _ = plot_diagonal_kernel_2d(kernel)
     ax.set_title("noise kernel from isotropic without T correction")
     fig.show()
 
-    cos_kernel = as_isotropic_kernel(get_diagonal_noise_kernel(b))
+    cos_kernel = as_isotropic_kernel_from_diagonal(
+        get_diagonal_kernel_from_operators(b),
+    )
     fig, ax, _ = plot_isotropic_noise_kernel_1d_x(
         cos_kernel,
         measure="abs",
@@ -475,21 +481,21 @@ def plot_kernel(
 
     operators = get_noise_operators(system, config)
     basis_x = stacked_basis_as_fundamental_position_basis(operators["basis"][1][0])
-    converted = as_diagonal_noise_operators(
+    converted = as_diagonal_noise_operators_from_full(
         convert_noise_operator_list_to_basis(
             operators,
             TupleBasis(basis_x, basis_x),
         ),
     )
-    kernel = get_diagonal_noise_kernel(converted)
-    fig, ax, _ = plot_diagonal_kernel(kernel)
+    kernel = get_diagonal_kernel_from_operators(converted)
+    fig, ax, _ = plot_diagonal_kernel_2d(kernel)
     ax.set_title("noise kernel as diagonal")
     fig.show()
 
-    truncated = truncate_diagonal_noise_operators(converted, range(5))
-    kernel_error = get_diagonal_noise_kernel(truncated)
+    truncated = truncate_diagonal_noise_operator_list(converted, range(5))
+    kernel_error = get_diagonal_kernel_from_operators(truncated)
     kernel_error["data"] -= kernel["data"]
-    fig, ax, _ = plot_diagonal_kernel(kernel_error)
+    fig, ax, _ = plot_diagonal_kernel_2d(kernel_error)
     ax.set_title("truncated noise kernel as diagonal")
     fig.show()
 

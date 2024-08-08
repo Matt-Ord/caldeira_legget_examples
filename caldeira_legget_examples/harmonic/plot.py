@@ -8,10 +8,10 @@ from surface_potential_analysis.state_vector.eigenvalue_list_plot import (
     plot_eigenstate_occupations,
 )
 from surface_potential_analysis.state_vector.plot import (
-    animate_all_band_occupations,
+    animate_all_eigenstate_occupations,
     animate_state_over_list_1d_k,
     animate_state_over_list_1d_x,
-    plot_all_band_occupations,
+    plot_all_eigenstate_occupations,
     plot_state_1d_x,
 )
 from surface_potential_analysis.state_vector.state_vector_list import (
@@ -110,9 +110,9 @@ def plot_stochastic_evolution() -> None:
 def plot_stochastic_occupation() -> None:
     states = get_stochastic_evolution()
     hamiltonian = get_hamiltonian(200)
-    fig0, ax0 = plot_all_band_occupations(hamiltonian, states)
+    fig0, ax0 = plot_all_eigenstate_occupations(hamiltonian, states)
 
-    fig1, ax1, _anim0 = animate_all_band_occupations(hamiltonian, states)
+    fig1, ax1, _anim0 = animate_all_eigenstate_occupations(hamiltonian, states)
 
     eigenstates = calculate_eigenvectors_hermitian(hamiltonian)
 
