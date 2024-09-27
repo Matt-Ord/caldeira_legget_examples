@@ -15,8 +15,12 @@ if __name__ == "__main__":
         temperature=155,
         operator_truncation=(1, 2),
     )
-
-    simulation_config = PeriodicSimulationConfig(5000, 1, 500, 1, 1)
+    simulation_config = PeriodicSimulationConfig(
+        n=5,
+        step=1000,
+        dt_ratio=500,
+        n_trajectories=1,
+    )
 
     plot_stochastic_evolution(
         system,

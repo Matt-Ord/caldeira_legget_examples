@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Iterable, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Iterable, Literal, Self, TypeVar
 
 import numpy as np
-from scipy.constants import Boltzmann, electron_volt, hbar
+from scipy.constants import Boltzmann, electron_volt, hbar  # type: ignore unknown
 from surface_potential_analysis.basis.basis import (
     FundamentalBasis,
     FundamentalTransformedPositionBasis,
@@ -58,8 +59,17 @@ class PeriodicSystem:
     gamma: float
 
     @property
-    def eta(self) -> float:  # noqa: D102
+    def eta(self: Self) -> float:  # noqa: D102
         return get_eta(self.gamma, self.mass)
+
+    def __hash__(self: Self) -> int:
+        h = hashlib.sha256(usedforsecurity=False)
+        h.update(self.id.encode())
+        h.update(str(self.barrier_energy).encode())
+        h.update(str(self.lattice_constant).encode())
+        h.update(str(self.mass).encode())
+
+        return int.from_bytes(h.digest(), "big")
 
 
 @dataclass
@@ -106,7 +116,7 @@ HYDROGEN_NICKEL_SYSTEM = PeriodicSystem(
 
 # A free particle, designed to be ran at T=get_dimensionless_temperature
 FREE_SYSTEM = PeriodicSystem(
-    id="Free1",
+    id="Free",
     barrier_energy=0,
     lattice_constant=1,
     mass=(hbar) ** 2,

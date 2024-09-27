@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 import numpy as np
-from scipy.constants import hbar
+from scipy.constants import hbar  # type: ignore unknown
 from surface_potential_analysis.basis.basis import (
     FundamentalPositionBasis,
 )

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Self, TypeVar
 
 import numpy as np
-from scipy.constants import hbar
+from scipy.constants import hbar  # type: ignore unknown
 from surface_potential_analysis.basis.time_basis_like import EvenlySpacedTimeBasis
 from surface_potential_analysis.basis.util import (
     BasisUtil,
@@ -117,11 +117,11 @@ def get_coherent_evolution_decomposition(
 class PeriodicSimulationConfig:
     """Simulation specific config."""
 
-    n: int
-    step: int
-    dt_ratio: float = 500
-    n_trajectories: int = 1
-    n_realizations: int = 1
+    n: int = field(kw_only=True)
+    step: int = field(kw_only=True)
+    dt_ratio: float = field(default=500, kw_only=True)
+    n_trajectories: int = field(default=1, kw_only=True)
+    n_realizations: int = field(default=1, kw_only=True)
 
     def __hash__(self: Self) -> int:
         """Generate a hash."""
@@ -140,7 +140,7 @@ def _get_stochastic_evolution_cache(
     simulation_config: PeriodicSimulationConfig,
 ) -> Path:
     return Path(
-        f"examples/data/{system.id}/stochastic.{config.shape[0]}.{config.resolution[0]}.{hash(simulation_config)}.{config.temperature}K.npz",
+        f"data/stochastic.{system.id}.{hash(system)}.{config.shape[0]}.{config.resolution[0]}.{hash(simulation_config)}.{config.temperature}K.npz",
     )
 
 
@@ -205,5 +205,5 @@ def get_stochastic_evolution(
         operator_list,
         n_trajectories=simulation_config.n_trajectories,
         n_realizations=simulation_config.n_realizations,
-        method="Order2ExplicitWeak",
+        method="Order2ExplicitWeakR5",
     )

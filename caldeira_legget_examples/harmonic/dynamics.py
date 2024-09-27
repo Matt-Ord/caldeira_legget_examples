@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 import numpy as np
-from scipy.constants import Boltzmann
+from scipy.constants import Boltzmann  # type: ignore unknown
 from surface_potential_analysis.basis.time_basis_like import EvenlySpacedTimeBasis
 from surface_potential_analysis.dynamics.schrodinger.solve import (
     solve_schrodinger_equation,
