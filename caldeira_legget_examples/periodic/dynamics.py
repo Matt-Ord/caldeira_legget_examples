@@ -36,7 +36,7 @@ from .system import (
     PeriodicSystem,
     PeriodicSystemConfig,
     get_hamiltonian,
-    get_noise_operators,
+    get_temperature_corrected_noise_operators,
 )
 
 if TYPE_CHECKING:
@@ -170,7 +170,7 @@ def get_stochastic_evolution(
         simulation_config.n * simulation_config.step * dt,
     )
 
-    operators = get_noise_operators(system, config)
+    operators = get_temperature_corrected_noise_operators(system, config)
     operator_list = list[SingleBasisOperator[Any]]()
     args = np.argsort(np.abs(operators["eigenvalue"]))[::-1]
 

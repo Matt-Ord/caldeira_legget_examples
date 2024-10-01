@@ -8,6 +8,7 @@ import numpy as np
 from scipy.constants import Boltzmann, electron_volt, hbar  # type: ignore unknown
 from surface_potential_analysis.basis.basis import (
     FundamentalBasis,
+    FundamentalPositionBasis,
     FundamentalTransformedPositionBasis,
     FundamentalTransformedPositionBasis1d,
     TransformedPositionBasis,
@@ -23,8 +24,17 @@ from surface_potential_analysis.basis.stacked_basis import (
 from surface_potential_analysis.hamiltonian_builder.momentum_basis import (
     total_surface_hamiltonian,
 )
+from surface_potential_analysis.kernel.build import (
+    get_temperature_corrected_diagonal_noise_operators,
+    truncate_diagonal_noise_operator_list,
+)
 from surface_potential_analysis.kernel.gaussian import (
-    get_temperature_corrected_effective_gaussian_noise_operators,
+    get_effective_gaussian_parameters,
+    get_linear_gaussian_operators_explicit_taylor_stacked,
+    get_periodic_gaussian_operators_explicit_taylor_stacked,
+)
+from surface_potential_analysis.kernel.kernel import (
+    get_diagonal_kernel_from_diagonal_operators,
 )
 from surface_potential_analysis.potential.conversion import convert_potential_to_basis
 from surface_potential_analysis.stacked_basis.conversion import (
@@ -32,12 +42,14 @@ from surface_potential_analysis.stacked_basis.conversion import (
 )
 
 from caldeira_legget_examples.util import (
-    get_caldeira_leggett_noise_operator,
     get_eta,
 )
 
 if TYPE_CHECKING:
+    from surface_potential_analysis.basis.basis_like import BasisLike
     from surface_potential_analysis.kernel.kernel import (
+        SingleBasisDiagonalNoiseKernel,
+        SingleBasisDiagonalNoiseOperatorList,
         SingleBasisNoiseOperatorList,
     )
     from surface_potential_analysis.operator.operator import SingleBasisOperator
@@ -80,6 +92,7 @@ class PeriodicSystemConfig:
     resolution: tuple[int]
     temperature: float
     operator_truncation: Iterable[int] | None = None
+    operator_type: Literal["periodic", "linear"] = "periodic"
 
 
 SODIUM_COPPER_SYSTEM = PeriodicSystem(
@@ -219,56 +232,106 @@ def get_hamiltonian(
     return total_surface_hamiltonian(converted, system.mass, np.array([0]))
 
 
-def _get_noise_operators_standard(
+def _get_noise_operators_periodic(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
-) -> SingleBasisNoiseOperatorList[
+) -> SingleBasisDiagonalNoiseOperatorList[
     FundamentalBasis[int],
-    TupleBasisWithLengthLike[TransformedPositionBasis[int, int, Literal[1]]],
+    TupleBasisWithLengthLike[*tuple[FundamentalPositionBasis[Any, Any], ...]],
 ]:
     hamiltonian = get_hamiltonian(system, config)
-    return get_temperature_corrected_effective_gaussian_noise_operators(
-        hamiltonian,
+    basis = hamiltonian["basis"][0]
+    a, _lambda = get_effective_gaussian_parameters(
+        basis,
         system.eta,
         config.temperature,
-        truncation=config.operator_truncation,
+    )
+    operators = get_periodic_gaussian_operators_explicit_taylor_stacked(
+        basis,
+        a,
+        _lambda,
+    )
+    truncation = (
+        range(operators["basis"][0].n)
+        if config.operator_truncation is None
+        else config.operator_truncation
+    )
+    return truncate_diagonal_noise_operator_list(
+        operators,
+        truncation,
     )
 
 
 def _get_noise_operators_linear(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
-) -> SingleBasisNoiseOperatorList[
+) -> SingleBasisDiagonalNoiseOperatorList[
     FundamentalBasis[int],
-    TupleBasisWithLengthLike[TransformedPositionBasis[int, int, Literal[1]]],
+    TupleBasisWithLengthLike[*tuple[FundamentalPositionBasis[Any, Any], ...]],
 ]:
-    hamiltonain = get_hamiltonian(system, config)
-    operator = get_caldeira_leggett_noise_operator(
-        hamiltonain["basis"][0],
-        system.mass,
+    hamiltonian = get_hamiltonian(system, config)
+    basis = hamiltonian["basis"][0]
+    a, _lambda = get_effective_gaussian_parameters(
+        basis,
+        system.eta,
         config.temperature,
-        system.gamma,
     )
-    return {
-        "basis": TupleBasis(FundamentalBasis(1), operator["basis"]),
-        "data": operator["data"],
-        "eigenvalue": np.array([1], dtype=np.complex128),
-    }
+
+    operators = get_linear_gaussian_operators_explicit_taylor_stacked(
+        basis,
+        a,
+        _lambda,
+    )
+    truncation = (
+        range(operators["basis"][0].n)
+        if config.operator_truncation is None
+        else config.operator_truncation
+    )
+    return truncate_diagonal_noise_operator_list(
+        operators,
+        truncation,
+    )
 
 
 def get_noise_operators(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
-    *,
-    ty: Literal["standard", "linear"] = "standard",
-) -> SingleBasisNoiseOperatorList[
+) -> SingleBasisDiagonalNoiseOperatorList[
     FundamentalBasis[int],
-    TupleBasisWithLengthLike[TransformedPositionBasis[Any, Any, Literal[1]]],
+    TupleBasisWithLengthLike[*tuple[FundamentalPositionBasis[Any, Any], ...]],
 ]:
-    match ty:
-        case "standard":
-            return _get_noise_operators_standard(system, config)
+    match config.operator_type:
+        case "periodic":
+            return _get_noise_operators_periodic(system, config)
         case "linear":
             return _get_noise_operators_linear(system, config)
-    msg = "Invalid ty provided"
+    msg = "Invalid operator type provided"
     raise TypeError(msg)
+
+
+def get_noise_kernel(
+    system: PeriodicSystem,
+    config: PeriodicSystemConfig,
+) -> SingleBasisDiagonalNoiseKernel[
+    TupleBasisWithLengthLike[*tuple[FundamentalPositionBasis[Any, Any], ...]]
+]:
+    operators = get_noise_operators(system, config)
+    return get_diagonal_kernel_from_diagonal_operators(operators)
+
+
+def get_temperature_corrected_noise_operators(
+    system: PeriodicSystem,
+    config: PeriodicSystemConfig,
+) -> SingleBasisNoiseOperatorList[
+    BasisLike[Any, Any],
+    TupleBasisWithLengthLike[
+        *tuple[FundamentalTransformedPositionBasis[Any, Any], ...]
+    ],
+]:
+    operators = get_temperature_corrected_noise_operators(system, config)
+    hamiltonian = get_hamiltonian(system, config)
+    return get_temperature_corrected_diagonal_noise_operators(
+        hamiltonian,
+        operators,
+        config.temperature,
+    )

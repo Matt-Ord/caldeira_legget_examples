@@ -39,7 +39,7 @@ from surface_potential_analysis.kernel.plot import (
     plot_noise_operators_single_sample_x,
 )
 from surface_potential_analysis.kernel.solve import (
-    get_noise_operators_real_isotropic_fft,
+    get_periodic_noise_operators_real_isotropic_fft,
 )
 from surface_potential_analysis.operator.conversion import (
     convert_operator_to_basis,
@@ -115,7 +115,7 @@ from .system import (
     get_basis,
     get_extended_interpolated_potential,
     get_hamiltonian,
-    get_noise_operators,
+    get_temperature_corrected_noise_operators,
 )
 
 if TYPE_CHECKING:
@@ -483,7 +483,7 @@ def plot_kernel(
         system.eta,
         config.temperature,
     )
-    b = get_noise_operators_real_isotropic_fft(a)
+    b = get_periodic_noise_operators_real_isotropic_fft(a)
     kernel = get_diagonal_kernel_from_operators(b)
     fig, ax, _ = plot_diagonal_kernel_2d(kernel)
     ax.set_title("noise kernel from isotropic without T correction")  # type: ignore unknown
@@ -514,7 +514,7 @@ def plot_kernel(
     ax.legend()  # type: ignore unknown
     fig.show()
 
-    operators = get_noise_operators(system, config)
+    operators = get_temperature_corrected_noise_operators(system, config)
     basis_x = stacked_basis_as_fundamental_position_basis(operators["basis"][1][0])
     converted = as_diagonal_noise_operators_from_full(
         convert_noise_operator_list_to_basis(
@@ -555,7 +555,7 @@ def plot_largest_collapse_operator(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
 ) -> None:
-    operators = get_noise_operators(system, config)
+    operators = get_temperature_corrected_noise_operators(system, config)
 
     args = np.argsort(np.abs(operators["eigenvalue"]))[::-1]
 
@@ -604,7 +604,7 @@ def plot_largest_collapse_operator_eigenvalues(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
 ) -> None:
-    operators = get_noise_operators(
+    operators = get_temperature_corrected_noise_operators(
         system,
         config,
     )
@@ -624,10 +624,9 @@ def plot_kernel_eigenvalues(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
 ) -> None:
-    operators = get_noise_operators(
+    operators = get_temperature_corrected_noise_operators(
         system,
         config,
-        ty="standard",
     )
     fig, _ax, _ = plot_diagonal_noise_operators_eigenvalues(operators)
 
@@ -640,10 +639,9 @@ def plot_collapse_operator_1d(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
 ) -> None:
-    operators = get_noise_operators(
+    operators = get_temperature_corrected_noise_operators(
         system,
         config,
-        ty="standard",
     )
 
     args = np.argsort(np.abs(operators["eigenvalue"]))[::-1]
@@ -673,10 +671,9 @@ def plot_collapse_operator_2d(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
 ) -> None:
-    operators = get_noise_operators(
+    operators = get_temperature_corrected_noise_operators(
         system,
         config,
-        ty="standard",
     )
     args = np.argsort(np.abs(operators["eigenvalue"]))[::-1]
 
@@ -727,7 +724,10 @@ def plot_effective_potential(
     fig, ax0, _ = plot_potential_1d_x(potential, ax=ax[0])
     ax0.set_xlabel("")  # type: ignore unknown
 
-    standard_operators = get_noise_operators(system, config, ty="standard")
+    standard_operators = get_temperature_corrected_noise_operators(
+        system,
+        config,
+    )
     fig, _, line = plot_noise_operators_single_sample_x(
         standard_operators,
         ax=ax[1],
@@ -735,7 +735,11 @@ def plot_effective_potential(
     )
     line.set_label("standard")
 
-    linear_operators = get_noise_operators(system, config, ty="linear")
+    config.operator_type = "linear"
+    linear_operators = get_temperature_corrected_noise_operators(
+        system,
+        config,
+    )
     fig, _, line = plot_noise_operators_single_sample_x(
         linear_operators,
         ax=ax[1],
