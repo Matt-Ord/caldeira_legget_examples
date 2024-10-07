@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Self, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Literal, Self, TypeVar
 
 import numpy as np
-from scipy.constants import hbar  # type: ignore unknown
+import sdeint  # type: ignore unknown
+from scipy.constants import Boltzmann, hbar  # type: ignore unknown
+from surface_potential_analysis.basis.basis import (
+    FundamentalBasis,
+)
+from surface_potential_analysis.basis.stacked_basis import TupleBasis
 from surface_potential_analysis.basis.time_basis_like import EvenlySpacedTimeBasis
 from surface_potential_analysis.basis.util import (
     BasisUtil,
@@ -30,18 +36,19 @@ from surface_potential_analysis.state_vector.conversion import (
 from surface_potential_analysis.state_vector.state_vector_list import (
     StateVectorList,
 )
-from surface_potential_analysis.util.decorators import npy_cached_dict
+from surface_potential_analysis.util.decorators import cached
 
 from .system import (
     PeriodicSystem,
     PeriodicSystemConfig,
     get_hamiltonian,
+    get_potential,
+    get_potential_derivative,
     get_temperature_corrected_noise_operators,
 )
 
 if TYPE_CHECKING:
     from surface_potential_analysis.basis.basis import (
-        FundamentalBasis,
         TransformedPositionBasis,
     )
     from surface_potential_analysis.basis.stacked_basis import (
@@ -49,6 +56,7 @@ if TYPE_CHECKING:
         TupleBasisLike,
         TupleBasisWithLengthLike,
     )
+    from surface_potential_analysis.state_vector.eigenstate_list import ValueList
     from surface_potential_analysis.state_vector.state_vector import (
         StateVector,
     )
@@ -134,20 +142,32 @@ class PeriodicSimulationConfig:
         ))
 
 
+def _get_simulation_times(
+    system: PeriodicSystem,
+    config: PeriodicSystemConfig,
+    simulation_config: PeriodicSimulationConfig,
+) -> EvenlySpacedTimeBasis[int, int, int]:
+    hamiltonian = get_hamiltonian(system, config)
+    dt = hbar / (np.max(np.abs(hamiltonian["data"])) * simulation_config.dt_ratio)
+    return EvenlySpacedTimeBasis(
+        simulation_config.n,
+        simulation_config.step,
+        0,
+        simulation_config.n * simulation_config.step * dt,
+    )
+
+
 def _get_stochastic_evolution_cache(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
     simulation_config: PeriodicSimulationConfig,
 ) -> Path:
     return Path(
-        f"data/stochastic.{system.id}.{hash(system)}.{config.shape[0]}.{config.resolution[0]}.{hash(simulation_config)}.{config.temperature}K.npz",
+        f"data/stochastic.{system.id}.{hash(system)}.{config.shape[0]}.{config.resolution[0]}.{config.operator_type}.{hash(simulation_config)}.{config.temperature}K",
     )
 
 
-@npy_cached_dict(
-    _get_stochastic_evolution_cache,
-    load_pickle=True,
-)
+@cached(_get_stochastic_evolution_cache)
 def get_stochastic_evolution(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
@@ -162,12 +182,11 @@ def get_stochastic_evolution(
     hamiltonian = get_hamiltonian(system, config)
 
     initial_state = get_initial_state(hamiltonian["basis"][0])
-    dt = hbar / (np.max(np.abs(hamiltonian["data"])) * simulation_config.dt_ratio)
-    times = EvenlySpacedTimeBasis(
-        simulation_config.n,
-        simulation_config.step,
-        0,
-        simulation_config.n * simulation_config.step * dt,
+
+    times = _get_simulation_times(
+        system,
+        config,
+        simulation_config,
     )
 
     operators = get_temperature_corrected_noise_operators(system, config)
@@ -205,5 +224,77 @@ def get_stochastic_evolution(
         operator_list,
         n_trajectories=simulation_config.n_trajectories,
         n_realizations=simulation_config.n_realizations,
-        method="Order2ExplicitWeakR5",
+        method="Order2ExplicitWeak",
     )
+
+
+def _get_potential_derivative_function(
+    system: PeriodicSystem,
+) -> Callable[[float], float]:
+    derivative = get_potential_derivative(get_potential(system))
+
+    k_points = BasisUtil(derivative["basis"]).k_points[0]
+
+    def _fn(x: float) -> float:
+        phases = 1j * k_points * x
+        return np.einsum(  # type:ignore unknown
+            "i,i->",
+            derivative["data"],
+            np.exp(phases) / np.sqrt(derivative["basis"].n),
+        )
+
+    return _fn
+
+
+def get_langevin_evolution(
+    system: PeriodicSystem,
+    config: PeriodicSystemConfig,
+    simulation_config: PeriodicSimulationConfig,
+) -> ValueList[
+    TupleBasisLike[
+        FundamentalBasis[int],
+        EvenlySpacedTimeBasis[int, int, int],
+    ]
+]:
+    times = _get_simulation_times(
+        system,
+        config,
+        simulation_config,
+    )
+
+    _force = _get_potential_derivative_function(system)
+
+    def _drift(
+        state: np.ndarray[Any, np.dtype[np.float64]],
+        _t: float,
+    ) -> np.ndarray[Any, np.dtype[np.float64]]:
+        x, v = state
+        dx = v
+        dv = (-system.gamma * v - _force(x)) / system.mass
+        return np.array([dx, dv])
+
+    diffusion = np.sqrt(
+        2 * system.gamma * hbar**2 * Boltzmann * config.temperature / system.mass,
+    )
+
+    def _diffusion(
+        _state: np.ndarray[Any, np.dtype[np.float64]],
+        _t: float,
+    ) -> np.ndarray[Any, np.dtype[np.float64]]:
+        # diffusion acts on velocity
+        return np.array([0, diffusion])
+
+    with ThreadPoolExecutor() as executor:
+        data = np.array(
+            list(
+                executor.map(
+                    lambda _: sdeint.itoint(_drift, _diffusion, 0, times.times),  # type: ignore unknown
+                    range(simulation_config.n_trajectories),
+                ),
+            ),
+        )
+
+    return {
+        "basis": TupleBasis(FundamentalBasis(simulation_config.n_trajectories), times),
+        "data": data.astype(np.complex128),
+    }

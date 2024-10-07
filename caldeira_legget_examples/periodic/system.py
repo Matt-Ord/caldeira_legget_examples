@@ -18,9 +18,11 @@ from surface_potential_analysis.basis.evenly_spaced_basis import (
     EvenlySpacedTransformedPositionBasis,
 )
 from surface_potential_analysis.basis.stacked_basis import (
+    StackedBasisWithVolumeLike,
     TupleBasis,
     TupleBasisWithLengthLike,
 )
+from surface_potential_analysis.basis.util import BasisUtil
 from surface_potential_analysis.hamiltonian_builder.momentum_basis import (
     total_surface_hamiltonian,
 )
@@ -59,7 +61,7 @@ _L0Inv = TypeVar("_L0Inv", bound=int)
 _L1Inv = TypeVar("_L1Inv", bound=int)
 
 
-@dataclass
+@dataclass(frozen=True)
 class PeriodicSystem:
     """Represents the properties of a 1D Periodic System."""
 
@@ -83,8 +85,32 @@ class PeriodicSystem:
 
         return int.from_bytes(h.digest(), "big")
 
+    def with_barrier_energy(self: Self, energy: float) -> PeriodicSystem:
+        """PeriodicSystem with barrier energy.
 
-@dataclass
+        Parameters
+        ----------
+        self : Self
+        energy : float
+
+        Returns
+        -------
+        PeriodicSystem
+
+        """
+        return PeriodicSystem(
+            id=self.id,
+            barrier_energy=energy,
+            lattice_constant=self.lattice_constant,
+            mass=self.mass,
+            gamma=self.gamma,
+        )
+
+
+OperatorType = Literal["periodic", "linear"]
+
+
+@dataclass(frozen=True)
 class PeriodicSystemConfig:
     """Configure the simlation-specific detail of the system."""
 
@@ -92,7 +118,52 @@ class PeriodicSystemConfig:
     resolution: tuple[int]
     temperature: float
     operator_truncation: Iterable[int] | None = None
-    operator_type: Literal["periodic", "linear"] = "periodic"
+    operator_type: OperatorType = "periodic"
+
+    def with_operator_type(
+        self: Self,
+        operator_type: OperatorType,
+    ) -> PeriodicSystemConfig:
+        """Config with operator_type.
+
+        Parameters
+        ----------
+        self : Self
+        temperature : float
+
+        Returns
+        -------
+        PeriodicSystemConfig
+
+        """
+        return PeriodicSystemConfig(
+            self.shape,
+            self.resolution,
+            self.temperature,
+            self.operator_truncation,
+            operator_type,
+        )
+
+    def with_temperature(self: Self, temperature: float) -> PeriodicSystemConfig:
+        """Config with temperature.
+
+        Parameters
+        ----------
+        self : Self
+        temperature : float
+
+        Returns
+        -------
+        PeriodicSystemConfig
+
+        """
+        return PeriodicSystemConfig(
+            self.shape,
+            self.resolution,
+            temperature,
+            self.operator_truncation,
+            self.operator_type,
+        )
 
 
 SODIUM_COPPER_SYSTEM = PeriodicSystem(
@@ -150,6 +221,21 @@ def get_potential(
     axis = FundamentalTransformedPositionBasis1d[Literal[3]](np.array([delta_x]), 3)
     vector = 0.25 * system.barrier_energy * np.array([2, -1, -1]) * np.sqrt(3)
     return {"basis": TupleBasis(axis), "data": vector}
+
+
+def get_potential_derivative(
+    potential: Potential[StackedBasisWithVolumeLike[Any, Any, Any]],
+    *,
+    axis: int = 0,
+) -> Potential[
+    TupleBasisWithLengthLike[*tuple[FundamentalTransformedPositionBasis[Any, Any], ...]]
+]:
+    converted = convert_potential_to_basis(
+        potential,
+        stacked_basis_as_fundamental_momentum_basis(potential["basis"]),
+    )
+    k_points = BasisUtil(converted["basis"]).k_points[axis]
+    return {"basis": converted["basis"], "data": 1j * k_points * converted["data"]}
 
 
 def get_interpolated_potential(
@@ -324,11 +410,9 @@ def get_temperature_corrected_noise_operators(
     config: PeriodicSystemConfig,
 ) -> SingleBasisNoiseOperatorList[
     BasisLike[Any, Any],
-    TupleBasisWithLengthLike[
-        *tuple[FundamentalTransformedPositionBasis[Any, Any], ...]
-    ],
+    TupleBasisWithLengthLike[*tuple[FundamentalPositionBasis[Any, Any], ...]],
 ]:
-    operators = get_temperature_corrected_noise_operators(system, config)
+    operators = get_noise_operators(system, config)
     hamiltonian = get_hamiltonian(system, config)
     return get_temperature_corrected_diagonal_noise_operators(
         hamiltonian,

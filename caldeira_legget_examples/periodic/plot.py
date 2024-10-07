@@ -16,7 +16,6 @@ from surface_potential_analysis.basis.stacked_basis import (
     TupleBasis,
     TupleBasisWithLengthLike,
 )
-from surface_potential_analysis.basis.util import get_displacements_nx
 from surface_potential_analysis.kernel.build import (
     truncate_diagonal_noise_operator_list,
 )
@@ -40,6 +39,9 @@ from surface_potential_analysis.kernel.plot import (
 )
 from surface_potential_analysis.kernel.solve import (
     get_periodic_noise_operators_real_isotropic_fft,
+)
+from surface_potential_analysis.operator.build import (
+    get_displacements_matrix_x_stacked,
 )
 from surface_potential_analysis.operator.conversion import (
     convert_operator_to_basis,
@@ -79,6 +81,7 @@ from surface_potential_analysis.state_vector.plot import (
     _get_x_operator,
     animate_state_over_list_1d_k,
     animate_state_over_list_1d_x,
+    get_average_displacements,
     plot_average_displacement_1d_x,
     plot_average_eigenstate_occupation,
     plot_averaged_occupation_1d_k,
@@ -93,6 +96,7 @@ from surface_potential_analysis.state_vector.plot import (
     plot_state_1d_x,
 )
 from surface_potential_analysis.state_vector.plot_value_list import (
+    plot_average_value_list_against_time,
     plot_value_list_against_time,
 )
 from surface_potential_analysis.state_vector.state_vector_list import (
@@ -107,6 +111,7 @@ from .dynamics import (
     PeriodicSimulationConfig,
     get_coherent_evolution,
     get_coherent_evolution_decomposition,
+    get_langevin_evolution,
     get_stochastic_evolution,
 )
 from .system import (
@@ -319,7 +324,7 @@ def get_free_displacement_rate(
 ) -> float:
     # Note factor of hbar**2 here...
     # I think this is due to conventions we use when defining gamma
-    return Boltzmann * config.temperature / (system.gamma * hbar**2)
+    return 2 * Boltzmann * config.temperature / (system.gamma * hbar**2)
 
 
 def plot_free_displacement_rate(  # noqa: PLR0913
@@ -735,10 +740,10 @@ def plot_effective_potential(
     )
     line.set_label("standard")
 
-    config.operator_type = "linear"
+    linear_config = config.with_operator_type("linear")
     linear_operators = get_temperature_corrected_noise_operators(
         system,
-        config,
+        linear_config,
     )
     fig, _, line = plot_noise_operators_single_sample_x(
         linear_operators,
@@ -797,44 +802,44 @@ def get_displacement_state(basis: _SBV0, alpha: complex) -> StateVector[_SBV0]:
 
 def _get_coherent_state_generator(
     basis: _SBV0,
-    x_0: tuple[int, ...],
-    k_0: tuple[int,],
-    sigma_0: float,
+    x_0: tuple[float, ...],
+    k_0: tuple[float, ...],
+    sigma_0: tuple[float, ...],
 ) -> SingleBasisOperator[_SBV0]:
     basis_x = stacked_basis_as_fundamental_position_basis(basis)
 
-    displacements_nx = get_displacements_nx(basis)
-
     # x - x' - x_0
-    shifted_displacements = tuple(
-        np.roll(d, dx, axis=(1)) for (d, dx) in zip(displacements_nx, x_0)
+    displacements = get_displacements_matrix_x_stacked(basis, x_0)
+    distance = np.linalg.norm(
+        displacements["data"].reshape(displacements["basis"].shape)
+        / np.array(sigma_0)[:, np.newaxis],
+        axis=0,
     )
-    _b = np.prod(np.square(shifted_displacements), axis=0)
+
     # i k.(x - x')
-    dk = tuple(n / f for (n, f) in zip(k_0, basis_x.shape))
-    phi = (2 * np.pi) * np.einsum(  # type: ignore unknown
-        "ijk,i->jk",
-        displacements_nx,
-        dk,
+    phi = (2 * np.pi) * np.einsum(  # type: ignore unknown lib type
+        "ij,i->j",
+        displacements["data"].reshape(displacements["basis"].shape),
+        k_0,
     )
+
+    data = np.exp(-1j * phi - np.square(distance) / 2)
+    norm = np.sqrt(np.sum(np.square(np.abs(data))))
 
     return convert_operator_to_basis(
         {
             "basis": TupleBasis(basis_x, basis_x),
-            "data": np.exp(
-                1j * phi
-                - (np.prod(np.square(shifted_displacements), axis=0) / (2 * sigma_0)),
-            ),
+            "data": data / norm,
         },
         TupleBasis(basis, basis),
     )
 
 
-def _get_coherent_state(
+def get_coherent_state(
     basis: _SBV0,
-    x_0: tuple[int,],
-    k_0: tuple[int,],
-    sigma_0: float,
+    x_0: tuple[float,],
+    k_0: tuple[float,],
+    sigma_0: tuple[float,],
 ) -> StateVector[_SBV0]:
     operator = _get_coherent_state_generator(basis, x_0, k_0, sigma_0)
 
@@ -847,9 +852,9 @@ def _get_coherent_state(
 def _get_coherent_states(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
-    x_0: tuple[np.ndarray[Any, np.dtype[np.int_]],],
-    k_0: tuple[np.ndarray[Any, np.dtype[np.int_]],],
-    sigma_0: float,
+    x_0: tuple[np.ndarray[Any, np.dtype[np.float64]],],
+    k_0: tuple[np.ndarray[Any, np.dtype[np.float64]],],
+    sigma_0: tuple[np.ndarray[Any, np.dtype[np.float64]],],
 ) -> StateVectorList[
     FundamentalBasis[int],
     TupleBasisWithLengthLike[TransformedPositionBasis[int, int, Literal[1]]],
@@ -857,8 +862,8 @@ def _get_coherent_states(
     basis = get_basis(system, config)
     return as_state_vector_list(
         (
-            _get_coherent_state(basis, x_0, k_0, sigma_0)
-            for (x_0, k_0) in zip(zip(*x_0), zip(*k_0))
+            get_coherent_state(basis, x, k, sigma)
+            for (x, k, sigma) in zip(zip(*x_0), zip(*k_0), zip(*sigma_0))
         ),
     )
 
@@ -913,9 +918,9 @@ def get_random_boltzmann_state(
 def _get_coherent_thermal_state(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
-    x_0: tuple[int,],
-    k_0: tuple[int,],
-    sigma_0: float,
+    x_0: tuple[float,],
+    k_0: tuple[float,],
+    sigma_0: tuple[float,],
 ) -> StateVector[
     TupleBasisWithLengthLike[TransformedPositionBasis[int, int, Literal[1]]]
 ]:
@@ -929,17 +934,17 @@ def _get_coherent_thermal_state(
 def _get_coherent_thermal_states(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
-    x_0: tuple[np.ndarray[Any, np.dtype[np.int_]],],
-    k_0: tuple[np.ndarray[Any, np.dtype[np.int_]],],
-    sigma_0: float,
+    x_0: tuple[np.ndarray[Any, np.dtype[np.float64]],],
+    k_0: tuple[np.ndarray[Any, np.dtype[np.float64]],],
+    sigma_0: tuple[np.ndarray[Any, np.dtype[np.float64]],],
 ) -> StateVectorList[
     FundamentalBasis[int],
     TupleBasisWithLengthLike[TransformedPositionBasis[int, int, Literal[1]]],
 ]:
     return as_state_vector_list(
         (
-            _get_coherent_thermal_state(system, config, x_0, k_0, sigma_0)
-            for (x_0, k_0) in zip(zip(*x_0), zip(*k_0))
+            _get_coherent_thermal_state(system, config, x_0, k_0, s)
+            for (x_0, k_0, s) in zip(zip(*x_0), zip(*k_0), zip(*sigma_0))
         ),
     )
 
@@ -950,8 +955,8 @@ def plot_coherent_state(
 ) -> None:
     basis = get_basis(system, config)
 
-    coherent_state = _get_coherent_state(basis, (0,), (360,), 9)
-    thermal_state = _get_coherent_thermal_state(system, config, (0,), (360,), 9)
+    coherent_state = get_coherent_state(basis, (0,), (360,), (9,))
+    thermal_state = _get_coherent_thermal_state(system, config, (0,), (360,), (9,))
 
     fig, ax, line = plot_state_1d_x(coherent_state)
     line.set_label("coherent")
@@ -969,16 +974,16 @@ def plot_coherent_state(
     fig.show()
 
     fig, ax = get_figure(None)
-    k0 = np.arange(0, 360, 120)
+    k0 = np.arange(0, 360, 120).astype(np.float64)
     for temperature in [config.temperature]:
-        config.temperature = temperature
+        config = config.with_temperature(temperature)
         for sigma_0 in [1200 / 120, 1200 / 90, 1200 / 60, 1200 / 30]:
             thermal_states = _get_coherent_thermal_states(
                 system,
                 config,
                 (np.zeros_like(k0),),
                 (k0,),
-                sigma_0,
+                (sigma_0 * np.zeros_like(k0),),
             )
 
             thermal_k = _get_average_k(thermal_states, 0)
@@ -987,7 +992,7 @@ def plot_coherent_state(
                 config,
                 (np.zeros_like(k0),),
                 (k0,),
-                sigma_0,
+                (sigma_0 * np.zeros_like(k0),),
             )
 
             coherent_k = _get_average_k(coherent_states, 0)
@@ -1007,19 +1012,24 @@ def plot_rate_against_potential(
     energies: np.ndarray[Any, np.dtype[np.float64]],
 ) -> None:
     fig, ax = get_figure(None)
+    fig1, ax1 = get_figure(None)
 
     for energy in energies:
-        modified_system = PeriodicSystem(
-            id=system.id,
-            barrier_energy=energy,
-            lattice_constant=system.lattice_constant,
-            mass=system.mass,
-            gamma=system.gamma,
-        )
+        modified_system = system.with_barrier_energy(energy)
 
         states = get_stochastic_evolution(modified_system, config, simulation_config)
 
         _, _, _ = plot_average_displacement_1d_x(states, ax=ax)
+
+        classical_positions = get_langevin_evolution(
+            system,
+            config,
+            simulation_config,
+        )
+        plot_average_value_list_against_time(
+            get_average_displacements(classical_positions),
+            ax=ax1,
+        )
 
     states = get_stochastic_evolution(system, config, simulation_config)
     _, _, line1 = plot_free_displacement_rate(
@@ -1030,4 +1040,14 @@ def plot_rate_against_potential(
     )
     line1.set_color("black")
     fig.show()
+
+    _, _, line1 = plot_free_displacement_rate(
+        system,
+        config,
+        states["basis"][0][1],
+        ax=ax1,
+    )
+    line1.set_color("black")
+    ax1.set_title("langevin")  # type: ignore lib
+    fig1.show()
     input()

@@ -22,7 +22,7 @@ from surface_potential_analysis.state_vector.conversion import (
 from surface_potential_analysis.state_vector.state_vector_list import (
     StateVectorList,
 )
-from surface_potential_analysis.util.decorators import npy_cached_dict
+from surface_potential_analysis.util.decorators import cached
 
 from .system import (
     get_hamiltonian,
@@ -90,9 +90,8 @@ def get_coherent_evolution_decomposition() -> (
     return solve_schrodinger_equation_decomposition(initial_state, times, hamiltonian)
 
 
-@npy_cached_dict(
-    Path("examples/data/harmonic/stochastic.256000.3.npz"),
-    load_pickle=True,
+@cached(
+    Path("examples/data/harmonic/stochastic.256000.3"),
 )
 def get_stochastic_evolution() -> (
     StateVectorList[
