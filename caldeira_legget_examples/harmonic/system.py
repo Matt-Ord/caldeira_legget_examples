@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 import numpy as np
 from scipy.constants import hbar  # type: ignore unknown
-from surface_potential_analysis.basis.basis import (
+from surface_potential_analysis.basis.legacy import (
     FundamentalPositionBasis,
-)
-from surface_potential_analysis.basis.stacked_basis import (
     StackedBasisWithVolumeLike,
     TupleBasis,
     TupleBasisWithLengthLike,
@@ -23,11 +21,11 @@ from caldeira_legget_examples.util import get_caldeira_leggett_noise_operator
 
 if TYPE_CHECKING:
     from surface_potential_analysis.operator.operator import SingleBasisOperator
-    from surface_potential_analysis.potential.potential import Potential
+    from surface_potential_analysis.potential.potential import LegacyPotential
 
     _B0Inv = TypeVar(
         "_B0Inv",
-        bound=StackedBasisWithVolumeLike[Any, Any, Any],
+        bound=StackedBasisWithVolumeLike,
     )
     _L0Inv = TypeVar("_L0Inv", bound=int)
 
@@ -38,7 +36,7 @@ ATOM_GAMMA = 1e-2 / hbar
 
 def get_potential(
     size: _L0Inv,
-) -> Potential[TupleBasisWithLengthLike[FundamentalPositionBasis[_L0Inv, Literal[1]]]]:
+) -> LegacyPotential[TupleBasisWithLengthLike[FundamentalPositionBasis]]:
     basis = TupleBasis(FundamentalPositionBasis(np.array([50]), size))
 
     data = np.zeros(basis.shape, dtype=np.complex128)
@@ -54,9 +52,7 @@ def get_potential(
 
 def get_hamiltonian(
     size: _L0Inv,
-) -> SingleBasisOperator[
-    TupleBasisWithLengthLike[FundamentalPositionBasis[_L0Inv, Literal[1]]]
-]:
+) -> SingleBasisOperator[TupleBasisWithLengthLike[FundamentalPositionBasis]]:
     potential = get_potential(size)
     return total_surface_hamiltonian(potential, ATOM_MASS, np.array([0]))
 

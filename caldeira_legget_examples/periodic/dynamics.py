@@ -3,18 +3,22 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Literal, Self, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Literal, Self
 
 import numpy as np
 import sdeint  # type: ignore unknown
 from scipy.constants import Boltzmann, hbar  # type: ignore unknown
-from surface_potential_analysis.basis.basis import (
-    FundamentalBasis,
+from slate.basis._basis import Basis
+from slate.basis.stacked._tuple_basis import (
+    as_tuple_basis,
+    fundamental_tuple_basis_from_metadata,
 )
-from surface_potential_analysis.basis.stacked_basis import TupleBasis
-from surface_potential_analysis.basis.time_basis_like import EvenlySpacedTimeBasis
-from surface_potential_analysis.basis.util import (
-    BasisUtil,
+from slate.metadata.stacked import StackedMetadata
+from slate.metadata.util import fundamental_nx_points
+from surface_potential_analysis.basis.legacy import (
+    EvenlySpacedTimeBasis,
+    FundamentalBasis,
+    TupleBasis,
 )
 from surface_potential_analysis.dynamics.schrodinger.solve import (
     solve_schrodinger_equation,
@@ -27,14 +31,13 @@ from surface_potential_analysis.operator.operator import SingleBasisOperator
 from surface_potential_analysis.operator.operator_list import (
     select_operator,
 )
-from surface_potential_analysis.stacked_basis.conversion import (
-    stacked_basis_as_fundamental_position_basis,
+from surface_potential_analysis.potential.conversion import (
+    get_continuous_potential,
+    get_potential_derivative,
 )
-from surface_potential_analysis.state_vector.conversion import (
-    convert_state_vector_to_basis,
-)
+from surface_potential_analysis.state_vector.state_vector import StateVector
 from surface_potential_analysis.state_vector.state_vector_list import (
-    StateVectorList,
+    LegacyStateVectorList,
 )
 from surface_potential_analysis.util.decorators import cached
 
@@ -43,57 +46,46 @@ from .system import (
     PeriodicSystemConfig,
     get_hamiltonian,
     get_potential,
-    get_potential_derivative,
     get_temperature_corrected_noise_operators,
 )
 
 if TYPE_CHECKING:
-    from surface_potential_analysis.basis.basis import (
+    from surface_potential_analysis.basis.legacy import (
         TransformedPositionBasis,
-    )
-    from surface_potential_analysis.basis.stacked_basis import (
-        StackedBasisWithVolumeLike,
         TupleBasisLike,
         TupleBasisWithLengthLike,
     )
     from surface_potential_analysis.state_vector.eigenstate_list import ValueList
-    from surface_potential_analysis.state_vector.state_vector import (
-        StateVector,
-    )
     from surface_potential_analysis.state_vector.state_vector_list import (
-        StateVectorList,
-    )
-
-    _B0Inv = TypeVar(
-        "_B0Inv",
-        bound=StackedBasisWithVolumeLike[Any, Any, Any],
+        LegacyStateVectorList,
     )
 
 
-def get_initial_state(basis: _B0Inv) -> StateVector[_B0Inv]:
-    data = np.zeros(basis.fundamental_n, dtype=np.complex128)
-    util = BasisUtil(basis)
-    middle = util.fundamental_n // 2
-    data = np.exp(-((util.fundamental_nx_points - middle) ** 2) / 50)
+def get_initial_state[B: Basis[StackedMetadata[Any, Any], Any]](
+    basis: B,
+) -> StateVector[B]:
+    data = np.zeros(basis.fundamental_size, dtype=np.complex128)
+
+    middle = basis.fundamental_size // 2
+    data = np.exp(-((fundamental_nx_points(basis.metadata) - middle) ** 2) / 50)
     data /= np.sqrt(np.sum(np.abs(data) ** 2))
-    return convert_state_vector_to_basis(
-        {
-            "basis": stacked_basis_as_fundamental_position_basis(basis),
-            "data": data,
-        },
-        basis,
-    )
+    return StateVector(
+        fundamental_tuple_basis_from_metadata(basis.metadata),
+        data,
+    ).with_basis(basis)
 
 
 def get_coherent_evolution(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
-) -> StateVectorList[
-    EvenlySpacedTimeBasis[int, int, int],
-    TupleBasisWithLengthLike[TransformedPositionBasis[int, int, Literal[1]]],
+) -> LegacyStateVectorList[
+    EvenlySpacedTimeBasis,
+    TupleBasisWithLengthLike[TransformedPositionBasis],
 ]:
     hamiltonian = get_hamiltonian(system, config)
-    initial_state = get_initial_state(hamiltonian["basis"][0])
+    initial_state = get_initial_state(
+        as_tuple_basis(hamiltonian.basis)[1].conjugate_basis(),
+    )
     times = EvenlySpacedTimeBasis(200, 1000, 0, 4e-12)
 
     return solve_schrodinger_equation(
@@ -106,8 +98,8 @@ def get_coherent_evolution(
 def get_coherent_evolution_decomposition(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
-) -> StateVectorList[
-    EvenlySpacedTimeBasis[int, int, int],
+) -> LegacyStateVectorList[
+    EvenlySpacedTimeBasis,
     TupleBasisWithLengthLike[TransformedPositionBasis[int, int, Literal[1]]],
 ]:
     hamiltonian = get_hamiltonian(system, config)
@@ -172,16 +164,16 @@ def get_stochastic_evolution(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
     simulation_config: PeriodicSimulationConfig,
-) -> StateVectorList[
+) -> LegacyStateVectorList[
     TupleBasisLike[
         FundamentalBasis[int],
-        EvenlySpacedTimeBasis[int, int, int],
+        EvenlySpacedTimeBasis,
     ],
     TupleBasisWithLengthLike[TransformedPositionBasis[int, int, Literal[1]]],
 ]:
     hamiltonian = get_hamiltonian(system, config)
 
-    initial_state = get_initial_state(hamiltonian["basis"][0])
+    initial_state = get_initial_state(hamiltonian.basis[0])
 
     times = _get_simulation_times(
         system,
@@ -231,19 +223,7 @@ def get_stochastic_evolution(
 def _get_potential_derivative_function(
     system: PeriodicSystem,
 ) -> Callable[[float], float]:
-    derivative = get_potential_derivative(get_potential(system))
-
-    k_points = BasisUtil(derivative["basis"]).k_points[0]
-
-    def _fn(x: float) -> float:
-        phases = 1j * k_points * x
-        return np.einsum(  # type:ignore unknown
-            "i,i->",
-            derivative["data"],
-            np.exp(phases) / np.sqrt(derivative["basis"].n),
-        )
-
-    return _fn
+    return get_continuous_potential(get_potential_derivative(get_potential(system)))
 
 
 def get_langevin_evolution(
@@ -253,7 +233,7 @@ def get_langevin_evolution(
 ) -> ValueList[
     TupleBasisLike[
         FundamentalBasis[int],
-        EvenlySpacedTimeBasis[int, int, int],
+        EvenlySpacedTimeBasis,
     ]
 ]:
     times = _get_simulation_times(
@@ -282,13 +262,13 @@ def get_langevin_evolution(
         _t: float,
     ) -> np.ndarray[Any, np.dtype[np.float64]]:
         # diffusion acts on velocity
-        return np.array([0, diffusion])
+        return np.array([0, diffusion]).reshape(2, -1)
 
     with ThreadPoolExecutor() as executor:
         data = np.array(
             list(
                 executor.map(
-                    lambda _: sdeint.itoint(_drift, _diffusion, 0, times.times),  # type: ignore unknown
+                    lambda _: sdeint.itoint(_drift, _diffusion, (0, 0), times.times),  # type: ignore unknown
                     range(simulation_config.n_trajectories),
                 ),
             ),

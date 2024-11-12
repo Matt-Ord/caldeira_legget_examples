@@ -73,7 +73,7 @@ def _stochastic_v_animation() -> None:
     ax.set_yticks([])  # type:ignore lib
     fig.set_size_inches((12, 4))
     fig.tight_layout()
-    _anim0.save("out0.mp4")
+    _anim0.save("scripts/out/out0.mp4")
 
 
 def _normal_modes_animation() -> None:
@@ -124,7 +124,7 @@ def _normal_modes_animation() -> None:
 
     fig.tight_layout()
     saved_anim = ArtistAnimation(fig, frames)
-    saved_anim.save("out1.mp4")
+    saved_anim.save("scripts/out/out1.mp4")
 
 
 def _taylor_expansion_animation() -> None:
@@ -158,7 +158,7 @@ def _taylor_expansion_animation() -> None:
     ax.set_yticks([])  # type: ignore lib
     fig.set_size_inches((12, 4))
     fig.tight_layout()
-    _anim0.save("out2.mp4")
+    _anim0.save("scripts/out/out2.mp4")
 
 
 def _taylor_expanded_simulation_example() -> None:
@@ -187,7 +187,7 @@ def _taylor_expanded_simulation_example() -> None:
     ax.set_yticks([])  # type: ignore lib
     # fig.set_size_inches((12, 4))
     fig.tight_layout()
-    _anim.save("out3.mp4", fps=30)
+    _anim.save("scripts/out/out3.mp4", fps=30)
     input()
 
 
@@ -217,7 +217,7 @@ def _periodic_simulation_example() -> None:
 
     # fig.set_size_inches((12, 4))
     fig.tight_layout()
-    _anim.save("out4.mp4", fps=60)
+    _anim.save("scripts/out/out4.mp4", fps=60)
     input()
 
 
@@ -227,11 +227,11 @@ _B0 = TypeVar("_B0", bound=BasisLike[Any, Any])
 def _get_all_coherent_states(
     states: StateVectorList[
         _B0,
-        StackedBasisWithVolumeLike[Any, Any, Any],
+        StackedBasisWithVolumeLike,
     ],
 ) -> StateVectorList[
     _B0,
-    StackedBasisWithVolumeLike[Any, Any, Any],
+    StackedBasisWithVolumeLike,
 ]:
     assert states["basis"][1].ndim == 1
     a = get_coherent_coordinates(states, axis=0)
@@ -309,7 +309,7 @@ def _gaussian_fit_example() -> None:
     ax.set_yticks([])  # type: ignore lib
     fig.tight_layout()
     saved_anim = ArtistAnimation(fig, frames)
-    saved_anim.save("out6.mp4", fps=30)
+    saved_anim.save("scripts/out/out6.mp4", fps=30)
 
 
 if __name__ == "__main__":

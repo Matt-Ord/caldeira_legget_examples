@@ -6,23 +6,19 @@ from typing import TYPE_CHECKING, Any, Iterable, Literal, Self, TypeVar
 
 import numpy as np
 from scipy.constants import Boltzmann, electron_volt, hbar  # type: ignore unknown
-from surface_potential_analysis.basis.basis import (
+from slate.basis.cropped import CroppedBasis
+from slate.basis.recast import RecastBasis
+from slate.basis.stacked._diagonal_basis import diagonal_basis
+from slate.basis.stacked._tuple_basis import tuple_basis
+from slate.basis.transformed import TransformedBasis
+from slate.basis.truncated import TruncatedBasis, Truncation
+from slate.metadata._metadata import LabelSpacing
+from slate.metadata.length import AxisDirections, SpacedLengthMetadata
+from surface_potential_analysis.basis.legacy import (
     FundamentalBasis,
     FundamentalPositionBasis,
-    FundamentalTransformedPositionBasis,
-    FundamentalTransformedPositionBasis1d,
-    TransformedPositionBasis,
-    TransformedPositionBasis1d,
-)
-from surface_potential_analysis.basis.evenly_spaced_basis import (
-    EvenlySpacedTransformedPositionBasis,
-)
-from surface_potential_analysis.basis.stacked_basis import (
-    StackedBasisWithVolumeLike,
-    TupleBasis,
     TupleBasisWithLengthLike,
 )
-from surface_potential_analysis.basis.util import BasisUtil
 from surface_potential_analysis.hamiltonian_builder.momentum_basis import (
     total_surface_hamiltonian,
 )
@@ -38,9 +34,8 @@ from surface_potential_analysis.kernel.gaussian import (
 from surface_potential_analysis.kernel.kernel import (
     get_diagonal_kernel_from_diagonal_operators,
 )
-from surface_potential_analysis.potential.conversion import convert_potential_to_basis
-from surface_potential_analysis.stacked_basis.conversion import (
-    stacked_basis_as_fundamental_momentum_basis,
+from surface_potential_analysis.potential.potential import (
+    Potential,
 )
 
 from caldeira_legget_examples.util import (
@@ -48,14 +43,16 @@ from caldeira_legget_examples.util import (
 )
 
 if TYPE_CHECKING:
-    from surface_potential_analysis.basis.basis_like import BasisLike
+    from slate.basis._basis import Basis
+    from slate.metadata import VolumeMetadata
+    from slate.metadata.stacked import StackedMetadata
+    from surface_potential_analysis.basis.legacy import BasisLike
     from surface_potential_analysis.kernel.kernel import (
         SingleBasisDiagonalNoiseKernel,
         SingleBasisDiagonalNoiseOperatorList,
         SingleBasisNoiseOperatorList,
     )
-    from surface_potential_analysis.operator.operator import SingleBasisOperator
-    from surface_potential_analysis.potential.potential import Potential
+    from surface_potential_analysis.operator.operator import Operator
 
 _L0Inv = TypeVar("_L0Inv", bound=int)
 _L1Inv = TypeVar("_L1Inv", bound=int)
@@ -73,6 +70,12 @@ class PeriodicSystem:
     gamma: float
 
     @property
+    def classical_gamma(self: Self) -> float:  # noqa: D102
+        # Note factor of 4 * hbar**2 here...
+        # This is due to conventions we use when defining gamma
+        return 4 * hbar**2 * self.gamma
+
+    @property
     def eta(self: Self) -> float:  # noqa: D102
         return get_eta(self.gamma, self.mass)
 
@@ -82,6 +85,7 @@ class PeriodicSystem:
         h.update(str(self.barrier_energy).encode())
         h.update(str(self.lattice_constant).encode())
         h.update(str(self.mass).encode())
+        h.update(str(self.gamma).encode())
 
         return int.from_bytes(h.digest(), "big")
 
@@ -104,6 +108,27 @@ class PeriodicSystem:
             lattice_constant=self.lattice_constant,
             mass=self.mass,
             gamma=self.gamma,
+        )
+
+    def with_gamma(self: Self, gamma: float) -> PeriodicSystem:
+        """PeriodicSystem with barrier energy.
+
+        Parameters
+        ----------
+        self : Self
+        energy : float
+
+        Returns
+        -------
+        PeriodicSystem
+
+        """
+        return PeriodicSystem(
+            id=self.id,
+            barrier_energy=self.barrier_energy,
+            lattice_constant=self.lattice_constant,
+            mass=self.mass,
+            gamma=gamma,
         )
 
 
@@ -216,62 +241,82 @@ def get_dimensionless_temperature(system: PeriodicSystem) -> float:
 
 def get_potential(
     system: PeriodicSystem,
-) -> Potential[TupleBasis[FundamentalTransformedPositionBasis1d[Literal[3]]]]:
+) -> Potential[np.complex128]:
     delta_x = np.sqrt(3) * system.lattice_constant / 2  # TODO: this is a bug...
-    axis = FundamentalTransformedPositionBasis1d[Literal[3]](np.array([delta_x]), 3)
-    vector = 0.25 * system.barrier_energy * np.array([2, -1, -1]) * np.sqrt(3)
-    return {"basis": TupleBasis(axis), "data": vector}
+    vectors = 0.25 * system.barrier_energy * np.array([2, -1, -1]) * np.sqrt(3)
 
-
-def get_potential_derivative(
-    potential: Potential[StackedBasisWithVolumeLike[Any, Any, Any]],
-    *,
-    axis: int = 0,
-) -> Potential[
-    TupleBasisWithLengthLike[*tuple[FundamentalTransformedPositionBasis[Any, Any], ...]]
-]:
-    converted = convert_potential_to_basis(
-        potential,
-        stacked_basis_as_fundamental_momentum_basis(potential["basis"]),
+    basis_x = tuple_basis(
+        (
+            FundamentalBasis(
+                SpacedLengthMetadata((3,), spacing=LabelSpacing(delta=delta_x)),
+            ),
+        ),
+        AxisDirections(vectors=(np.array([1.0]),)),
     )
-    k_points = BasisUtil(converted["basis"]).k_points[axis]
-    return {"basis": converted["basis"], "data": 1j * k_points * converted["data"]}
+    return Potential(
+        TransformedBasis(
+            diagonal_basis(
+                (basis_x, basis_x.conjugate_basis()),
+                None,
+            ),
+        ),
+        vectors.astype(np.complex128),
+    )
 
 
 def get_interpolated_potential(
     system: PeriodicSystem,
     resolution: tuple[_L0Inv],
-) -> Potential[
-    TupleBasisWithLengthLike[FundamentalTransformedPositionBasis[_L0Inv, Literal[1]]]
-]:
+) -> Potential[np.complex128]:
     potential = get_potential(system)
-    old = potential["basis"][0]
-    basis = TupleBasis(
-        TransformedPositionBasis1d[_L0Inv, Literal[3]](
-            old.delta_x,
-            old.n,
-            resolution[0],
+    basis_x = tuple_basis(
+        (
+            FundamentalBasis(
+                SpacedLengthMetadata(
+                    resolution,
+                    spacing=LabelSpacing(
+                        delta=potential.basis.metadata.children[0].children[0].delta,
+                    ),
+                ),
+            ),
         ),
+        AxisDirections(vectors=(np.array([1.0]),)),
     )
-    scaled_potential = potential["data"] * np.sqrt(resolution[0] / old.n)
-    return convert_potential_to_basis(
-        {"basis": basis, "data": scaled_potential},
-        stacked_basis_as_fundamental_momentum_basis(basis),
+
+    basis = RecastBasis(
+        diagonal_basis(
+            (basis_x, basis_x.conjugate_basis()),
+            None,
+        ),
+        basis_x,
+        CroppedBasis(potential.basis.size, TransformedBasis(basis_x)),
     )
+
+    scaled_potential = potential.raw_data * np.sqrt(
+        resolution[0] / potential.basis.size,
+    )
+    return Potential(basis, scaled_potential)
 
 
 def get_basis(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
-) -> TupleBasisWithLengthLike[TransformedPositionBasis[int, int, Literal[1]]]:
-    return TupleBasis[TransformedPositionBasis[int, int, Literal[1]]](
-        *tuple(
-            FundamentalTransformedPositionBasis[int, Literal[1]](
-                np.array([np.sqrt(3) * s * system.lattice_constant / 2]),
-                s * r,
-            )
-            for (s, r) in zip(config.shape, config.resolution)
+) -> Basis[VolumeMetadata, np.complex128]:
+    return tuple_basis(
+        (
+            FundamentalBasis(
+                SpacedLengthMetadata(
+                    tuple(a * b for a, b in zip(config.resolution, config.shape)),
+                    spacing=LabelSpacing(
+                        delta=np.sqrt(3)
+                        * config.shape[0]
+                        * system.lattice_constant
+                        / 2,
+                    ),
+                ),
+            ),
         ),
+        AxisDirections(vectors=(np.array([1]),)),
     )
 
 
@@ -279,43 +324,56 @@ def get_extended_interpolated_potential(
     system: PeriodicSystem,
     shape: tuple[_L0Inv],
     resolution: tuple[_L1Inv],
-) -> Potential[
-    TupleBasisWithLengthLike[
-        EvenlySpacedTransformedPositionBasis[_L1Inv, _L0Inv, Literal[0], Literal[1]]
-    ]
-]:
-    interpolated = get_interpolated_potential(system, resolution)
-    old = interpolated["basis"][0]
-    basis = TupleBasis(
-        EvenlySpacedTransformedPositionBasis[_L1Inv, _L0Inv, Literal[0], Literal[1]](
-            old.delta_x * shape[0],
-            n=old.n,
-            step=shape[0],
-            offset=0,
+) -> Potential[np.complex128]:
+    potential = get_interpolated_potential(system, resolution)
+
+    basis_x = tuple_basis(
+        (
+            FundamentalBasis(
+                SpacedLengthMetadata(
+                    tuple(a * b for a, b in zip(resolution, shape)),
+                    spacing=LabelSpacing(
+                        delta=potential.basis.metadata.children[0].children[0].delta
+                        * shape[0],
+                    ),
+                ),
+            ),
+        ),
+        AxisDirections(vectors=(np.array([1.0]),)),
+    )
+
+    basis = RecastBasis(
+        diagonal_basis(
+            (basis_x, basis_x.conjugate_basis()),
+            None,
+        ),
+        basis_x,
+        TruncatedBasis(
+            Truncation(potential.basis.size, shape[0], 0),
+            TransformedBasis(basis_x),
         ),
     )
-    scaled_potential = interpolated["data"] * np.sqrt(basis.fundamental_n / old.n)
+
+    scaled_potential = potential.raw_data * np.sqrt(
+        basis.fundamental_size / potential.basis.fundamental_size,
+    )
     if shape[0] % 2 == 1:
         # Place a minima at the center
         scaled_potential *= np.exp(1j * np.pi)
 
-    return {"basis": basis, "data": scaled_potential}
+    return Potential(basis, scaled_potential)
 
 
 def get_hamiltonian(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
-) -> SingleBasisOperator[
-    TupleBasisWithLengthLike[TransformedPositionBasis[int, int, Literal[1]]],
-]:
+) -> Operator[np.complex128, Basis[StackedMetadata[VolumeMetadata, None], Any]]:
     potential = get_extended_interpolated_potential(
         system,
         config.shape,
         config.resolution,
     )
-    basis = get_basis(system, config)
-    converted = convert_potential_to_basis(potential, basis)
-    return total_surface_hamiltonian(converted, system.mass, np.array([0]))
+    return total_surface_hamiltonian(potential, system.mass, np.array([0]))
 
 
 def _get_noise_operators_periodic(
@@ -323,7 +381,7 @@ def _get_noise_operators_periodic(
     config: PeriodicSystemConfig,
 ) -> SingleBasisDiagonalNoiseOperatorList[
     FundamentalBasis[int],
-    TupleBasisWithLengthLike[*tuple[FundamentalPositionBasis[Any, Any], ...]],
+    TupleBasisWithLengthLike[*tuple[FundamentalPositionBasis, ...]],
 ]:
     hamiltonian = get_hamiltonian(system, config)
     basis = hamiltonian["basis"][0]
@@ -353,7 +411,7 @@ def _get_noise_operators_linear(
     config: PeriodicSystemConfig,
 ) -> SingleBasisDiagonalNoiseOperatorList[
     FundamentalBasis[int],
-    TupleBasisWithLengthLike[*tuple[FundamentalPositionBasis[Any, Any], ...]],
+    TupleBasisWithLengthLike[*tuple[FundamentalPositionBasis, ...]],
 ]:
     hamiltonian = get_hamiltonian(system, config)
     basis = hamiltonian["basis"][0]
@@ -384,7 +442,7 @@ def get_noise_operators(
     config: PeriodicSystemConfig,
 ) -> SingleBasisDiagonalNoiseOperatorList[
     FundamentalBasis[int],
-    TupleBasisWithLengthLike[*tuple[FundamentalPositionBasis[Any, Any], ...]],
+    TupleBasisWithLengthLike[*tuple[FundamentalPositionBasis, ...]],
 ]:
     match config.operator_type:
         case "periodic":
@@ -399,7 +457,7 @@ def get_noise_kernel(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
 ) -> SingleBasisDiagonalNoiseKernel[
-    TupleBasisWithLengthLike[*tuple[FundamentalPositionBasis[Any, Any], ...]]
+    TupleBasisWithLengthLike[*tuple[FundamentalPositionBasis, ...]]
 ]:
     operators = get_noise_operators(system, config)
     return get_diagonal_kernel_from_diagonal_operators(operators)
@@ -410,7 +468,7 @@ def get_temperature_corrected_noise_operators(
     config: PeriodicSystemConfig,
 ) -> SingleBasisNoiseOperatorList[
     BasisLike[Any, Any],
-    TupleBasisWithLengthLike[*tuple[FundamentalPositionBasis[Any, Any], ...]],
+    TupleBasisWithLengthLike[*tuple[FundamentalPositionBasis, ...]],
 ]:
     operators = get_noise_operators(system, config)
     hamiltonian = get_hamiltonian(system, config)

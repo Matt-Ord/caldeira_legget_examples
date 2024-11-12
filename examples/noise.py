@@ -63,8 +63,8 @@ def _get_sampled_noise(
     n_samples: int,
 ) -> DiagonalOperatorList[
     TupleBasis[FundamentalBasis[int], FundamentalBasis[int]],
-    TupleBasisWithLengthLike[*tuple[FundamentalPositionBasis[Any, Any], ...]],
-    TupleBasisWithLengthLike[*tuple[FundamentalPositionBasis[Any, Any], ...]],
+    TupleBasisWithLengthLike[*tuple[FundamentalPositionBasis, ...]],
+    TupleBasisWithLengthLike[*tuple[FundamentalPositionBasis, ...]],
 ]:
     full_operators = get_noise_operators(system, config)
 

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 import numpy as np
 from scipy.constants import Boltzmann, hbar  # type: ignore unknown
-from surface_potential_analysis.basis.stacked_basis import (
+from surface_potential_analysis.basis.legacy import (
     StackedBasisWithVolumeLike,
     TupleBasis,
 )
@@ -13,11 +13,11 @@ from surface_potential_analysis.operator.conversion import (
     convert_diagonal_operator_to_basis,
 )
 from surface_potential_analysis.operator.operator import (
-    add_operator,
+    add_legacy_operator,
 )
 from surface_potential_analysis.stacked_basis.conversion import (
-    stacked_basis_as_fundamental_momentum_basis,
-    stacked_basis_as_fundamental_position_basis,
+    tuple_basis_as_fundamental,
+    tuple_basis_as_transformed_fundamental,
 )
 
 if TYPE_CHECKING:
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 _B0 = TypeVar(
     "_B0",
-    bound=StackedBasisWithVolumeLike[Any, Any, Any],
+    bound=StackedBasisWithVolumeLike,
 )
 
 
@@ -56,7 +56,7 @@ def get_caldeira_leggett_noise_operator(
         _description_
 
     """
-    basis_x = stacked_basis_as_fundamental_position_basis(basis)
+    basis_x = tuple_basis_as_fundamental(basis)
     mu = np.sqrt(4 * mass * Boltzmann * temperature)
     x_noise = convert_diagonal_operator_to_basis(
         {
@@ -67,7 +67,7 @@ def get_caldeira_leggett_noise_operator(
         TupleBasis(basis, basis),
     )
 
-    basis_k = stacked_basis_as_fundamental_momentum_basis(basis)
+    basis_k = tuple_basis_as_transformed_fundamental(basis)
 
     k_noise = convert_diagonal_operator_to_basis(
         {
@@ -78,4 +78,4 @@ def get_caldeira_leggett_noise_operator(
         TupleBasis(basis, basis),
     )
 
-    return add_operator(k_noise, x_noise)
+    return add_legacy_operator(k_noise, x_noise)

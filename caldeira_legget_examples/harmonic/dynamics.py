@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, TypeVar
+from typing import TYPE_CHECKING, Literal, TypeVar
 
 import numpy as np
 from scipy.constants import Boltzmann  # type: ignore unknown
@@ -14,13 +14,13 @@ from surface_potential_analysis.dynamics.stochastic_schrodinger.solve import (
     solve_stochastic_schrodinger_equation,
 )
 from surface_potential_analysis.stacked_basis.conversion import (
-    stacked_basis_as_fundamental_position_basis,
+    tuple_basis_as_fundamental,
 )
 from surface_potential_analysis.state_vector.conversion import (
     convert_state_vector_to_basis,
 )
 from surface_potential_analysis.state_vector.state_vector_list import (
-    StateVectorList,
+    LegacyStateVectorList,
 )
 from surface_potential_analysis.util.decorators import cached
 
@@ -40,24 +40,24 @@ if TYPE_CHECKING:
         TupleBasisWithLengthLike,
     )
     from surface_potential_analysis.state_vector.state_vector import (
-        StateVector,
+        LegacyStateVector,
     )
     from surface_potential_analysis.state_vector.state_vector_list import (
-        StateVectorList,
+        LegacyStateVectorList,
     )
 
     _B0Inv = TypeVar(
         "_B0Inv",
-        bound=StackedBasisWithVolumeLike[Any, Any, Any],
+        bound=StackedBasisWithVolumeLike,
     )
 
 
-def get_initial_state(basis: _B0Inv) -> StateVector[_B0Inv]:
+def get_initial_state(basis: _B0Inv) -> LegacyStateVector[_B0Inv]:
     data = np.zeros(basis.fundamental_n, dtype=np.complex128)
     data[basis.fundamental_n // 2] = 1
     return convert_state_vector_to_basis(
         {
-            "basis": stacked_basis_as_fundamental_position_basis(basis),
+            "basis": tuple_basis_as_fundamental(basis),
             "data": data,
         },
         basis,
@@ -65,9 +65,9 @@ def get_initial_state(basis: _B0Inv) -> StateVector[_B0Inv]:
 
 
 def get_coherent_evolution() -> (
-    StateVectorList[
-        EvenlySpacedTimeBasis[int, int, int],
-        TupleBasisWithLengthLike[FundamentalPositionBasis[int, Literal[1]]],
+    LegacyStateVectorList[
+        EvenlySpacedTimeBasis
+        TupleBasisWithLengthLike[FundamentalPositionBasis],
     ]
 ):
     hamiltonian = get_hamiltonian(100)
@@ -78,9 +78,9 @@ def get_coherent_evolution() -> (
 
 
 def get_coherent_evolution_decomposition() -> (
-    StateVectorList[
-        EvenlySpacedTimeBasis[int, int, int],
-        TupleBasisWithLengthLike[FundamentalPositionBasis[int, Literal[1]]],
+    LegacyStateVectorList[
+        EvenlySpacedTimeBasis
+        TupleBasisWithLengthLike[FundamentalPositionBasis],
     ]
 ):
     hamiltonian = get_hamiltonian(100)
@@ -94,12 +94,12 @@ def get_coherent_evolution_decomposition() -> (
     Path("examples/data/harmonic/stochastic.256000.3"),
 )
 def get_stochastic_evolution() -> (
-    StateVectorList[
+    LegacyStateVectorList[
         TupleBasisLike[
             FundamentalBasis[Literal[1]],
-            EvenlySpacedTimeBasis[int, int, int],
+            EvenlySpacedTimeBasis,
         ],
-        TupleBasisWithLengthLike[FundamentalPositionBasis[int, Literal[1]]],
+        TupleBasisWithLengthLike[FundamentalPositionBasis],
     ]
 ):
     hamiltonian = get_hamiltonian(200)

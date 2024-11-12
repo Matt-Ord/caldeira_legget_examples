@@ -7,11 +7,10 @@ from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
 from scipy.constants import Boltzmann, hbar  # type: ignore unknown
-from surface_potential_analysis.basis.basis_like import BasisLike
-from surface_potential_analysis.basis.explicit_basis import (
+from surface_potential_analysis.basis.legacy import (
+    BasisLike,
+    BasisWithTimeLike,
     ExplicitStackedBasisWithLength,
-)
-from surface_potential_analysis.basis.stacked_basis import (
     StackedBasisWithVolumeLike,
     TupleBasis,
     TupleBasisWithLengthLike,
@@ -53,7 +52,7 @@ from surface_potential_analysis.operator.operations import (
 )
 from surface_potential_analysis.operator.operator import (
     SingleBasisDiagonalOperator,
-    add_operator,
+    add_legacy_operator,
     apply_operator_to_state,
 )
 from surface_potential_analysis.operator.operator_list import (
@@ -69,8 +68,8 @@ from surface_potential_analysis.operator.plot import (
 )
 from surface_potential_analysis.potential.plot import plot_potential_1d_x
 from surface_potential_analysis.stacked_basis.conversion import (
-    stacked_basis_as_fundamental_momentum_basis,
-    stacked_basis_as_fundamental_position_basis,
+    tuple_basis_as_fundamental,
+    tuple_basis_as_transformed_fundamental,
 )
 from surface_potential_analysis.state_vector.eigenstate_calculation import (
     calculate_eigenvectors_hermitian,
@@ -81,9 +80,10 @@ from surface_potential_analysis.state_vector.plot import (
     _get_x_operator,
     animate_state_over_list_1d_k,
     animate_state_over_list_1d_x,
-    get_average_displacements,
     plot_average_displacement_1d_x,
+    plot_average_drift_1d_x,
     plot_average_eigenstate_occupation,
+    plot_average_isf_1d_x,
     plot_averaged_occupation_1d_k,
     plot_k_distribution_1d,
     plot_periodic_averaged_occupation_1d_x,
@@ -96,11 +96,10 @@ from surface_potential_analysis.state_vector.plot import (
     plot_state_1d_x,
 )
 from surface_potential_analysis.state_vector.plot_value_list import (
-    plot_average_value_list_against_time,
     plot_value_list_against_time,
 )
 from surface_potential_analysis.state_vector.state_vector_list import (
-    StateVectorList,
+    LegacyStateVectorList,
     as_state_vector_list,
     get_state_along_axis,
     state_vector_list_into_iter,
@@ -111,7 +110,6 @@ from .dynamics import (
     PeriodicSimulationConfig,
     get_coherent_evolution,
     get_coherent_evolution_decomposition,
-    get_langevin_evolution,
     get_stochastic_evolution,
 )
 from .system import (
@@ -129,9 +127,9 @@ if TYPE_CHECKING:
         FundamentalBasis,
         TransformedPositionBasis,
     )
-    from surface_potential_analysis.basis.time_basis_like import BasisWithTimeLike
     from surface_potential_analysis.operator.operator import SingleBasisOperator
-    from surface_potential_analysis.state_vector.state_vector import StateVector
+    from surface_potential_analysis.state_vector.eigenstate_list import ValueList
+    from surface_potential_analysis.state_vector.state_vector import LegacyStateVector
     from surface_potential_analysis.util.plot import Scale
     from surface_potential_analysis.util.util import Measure
 
@@ -255,7 +253,7 @@ def plot_stochastic_evolution(  # noqa: PLR0914
     ax1 = cast(Axes, ax.twinx())
     fig2, ax2 = get_figure(None)
     for _i, state in enumerate(state_vector_list_into_iter(states)):
-        if _i < 500:  # noqa: PLR2004
+        if _i > (100000 - 500):
             plot_state_1d_x(state, ax=ax1)
             plot_state_1d_k(state, ax=ax2)
     fig.show()
@@ -322,9 +320,50 @@ def get_free_displacement_rate(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
 ) -> float:
-    # Note factor of hbar**2 here...
-    # I think this is due to conventions we use when defining gamma
-    return 2 * Boltzmann * config.temperature / (system.gamma * hbar**2)
+    return 2 * Boltzmann * config.temperature / system.classical_gamma
+
+
+_BT0 = TypeVar("_BT0", bound=BasisWithTimeLike)
+
+
+def get_free_width(
+    system: PeriodicSystem,
+    config: PeriodicSystemConfig,
+    sigma_0: float,
+    times: _BT0,
+) -> ValueList[_BT0]:
+    sigma_p = hbar / (sigma_0 * np.sqrt(2))
+    return {"basis": times, "data": (1 / (2 * sigma_p)) * np.sqrt(hbar**2)}
+
+
+def get_free_drift(
+    system: PeriodicSystem,
+    times: _BT0,
+) -> ValueList[_BT0]:
+    print(system.gamma, times.times[1])
+    values = (1 - np.exp(-2 * system.gamma * times.times)) / (
+        2 * system.mass * (system.gamma / hbar)
+    )
+    # values = times.times * hbar / system.mass
+    return {"basis": times, "data": values.astype(np.complex128)}
+
+
+def plot_free_drift_rate(
+    system: PeriodicSystem,
+    times: BasisWithTimeLike[Any, Any],
+    *,
+    ax: Axes | None = None,
+    scale: Scale = "linear",
+    measure: Measure = "abs",
+) -> tuple[Figure, Axes, Line2D]:
+    drift = get_free_drift(system, times)
+
+    return plot_value_list_against_time(
+        drift,
+        ax=ax,
+        scale=scale,
+        measure=measure,
+    )
 
 
 def plot_free_displacement_rate(  # noqa: PLR0913
@@ -445,7 +484,7 @@ def plot_stochastic_occupation(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
     simulation_config: PeriodicSimulationConfig,
-) -> None:
+) -> tuple[Figure, Axes, Line2D]:
     states = get_stochastic_evolution(
         system,
         config,
@@ -453,17 +492,26 @@ def plot_stochastic_occupation(
     )
     hamiltonian = get_hamiltonian(system, config)
 
-    fig2, ax2, line = plot_average_eigenstate_occupation(hamiltonian, states)
+    fig2, ax2, line = plot_average_eigenstate_occupation(
+        hamiltonian,
+        states,
+    )
+    line.set_marker("+")
+    line.set_linestyle("")
 
     for ax in [ax2]:
-        _, _, line = plot_eigenstate_occupations(hamiltonian, config.temperature, ax=ax)
-        line.set_linestyle("--")
+        _, _, line = plot_eigenstate_occupations(
+            hamiltonian,
+            config.temperature,
+            ax=ax,
+        )
+        # line.set_linestyle("--")
         line.set_label("Expected")
 
         ax.legend([line], ["Boltzmann occupation"])  # type: ignore unknown
 
     fig2.show()
-    input()
+    return fig2, ax2, line
 
 
 def plot_thermal_occupation(
@@ -520,7 +568,7 @@ def plot_kernel(
     fig.show()
 
     operators = get_temperature_corrected_noise_operators(system, config)
-    basis_x = stacked_basis_as_fundamental_position_basis(operators["basis"][1][0])
+    basis_x = tuple_basis_as_fundamental(operators["basis"][1][0])
     converted = as_diagonal_noise_operators_from_full(
         convert_noise_operator_list_to_basis(
             operators,
@@ -564,10 +612,10 @@ def plot_largest_collapse_operator(
 
     args = np.argsort(np.abs(operators["eigenvalue"]))[::-1]
 
-    x_basis = stacked_basis_as_fundamental_position_basis(
+    x_basis = tuple_basis_as_fundamental(
         operators["basis"][1][0],
     )
-    k_basis = stacked_basis_as_fundamental_momentum_basis(
+    k_basis = tuple_basis_as_transformed_fundamental(
         operators["basis"][1][0],
     )
 
@@ -651,7 +699,7 @@ def plot_collapse_operator_1d(
 
     args = np.argsort(np.abs(operators["eigenvalue"]))[::-1]
 
-    x_basis = stacked_basis_as_fundamental_position_basis(
+    x_basis = tuple_basis_as_fundamental(
         operators["basis"][1][0],
     )
 
@@ -682,7 +730,7 @@ def plot_collapse_operator_2d(
     )
     args = np.argsort(np.abs(operators["eigenvalue"]))[::-1]
 
-    k_basis = stacked_basis_as_fundamental_momentum_basis(
+    k_basis = tuple_basis_as_transformed_fundamental(
         operators["basis"][1][0],
     )
 
@@ -757,7 +805,7 @@ def plot_effective_potential(
     input()
 
 
-_SBV0 = TypeVar("_SBV0", bound=StackedBasisWithVolumeLike[Any, Any, Any])
+_SBV0 = TypeVar("_SBV0", bound=StackedBasisWithVolumeLike)
 
 
 def _get_squeeze_operator(basis: _SBV0) -> SingleBasisOperator[_SBV0]:
@@ -768,10 +816,10 @@ def _get_squeeze_operator(basis: _SBV0) -> SingleBasisOperator[_SBV0]:
     )
 
 
-def get_squeeze_state(basis: _SBV0) -> StateVector[_SBV0]:
+def get_squeeze_state(basis: _SBV0) -> LegacyStateVector[_SBV0]:
     operator = _get_squeeze_operator(basis)
 
-    basis_k = stacked_basis_as_fundamental_position_basis(basis)
+    basis_k = tuple_basis_as_fundamental(basis)
     data = np.zeros(basis_k.n, dtype=np.complex128)
     data[0] = 1
     return apply_operator_to_state(operator, {"basis": basis_k, "data": data})
@@ -784,17 +832,17 @@ def _get_displacement_operator(
     x_operator = _get_x_operator(basis, 0)
     k_operator = _get_k_operator(basis, 0)
     return exp_operator(
-        add_operator(
+        add_legacy_operator(
             scale_operator(-1j * np.conj(alpha), x_operator),
             scale_operator(1j * alpha, k_operator),
         ),
     )
 
 
-def get_displacement_state(basis: _SBV0, alpha: complex) -> StateVector[_SBV0]:
+def get_displacement_state(basis: _SBV0, alpha: complex) -> LegacyStateVector[_SBV0]:
     operator = _get_displacement_operator(basis, alpha)
 
-    basis_k = stacked_basis_as_fundamental_position_basis(basis)
+    basis_k = tuple_basis_as_fundamental(basis)
     data = np.zeros(basis_k.n, dtype=np.complex128)
     data[0] = 1
     return apply_operator_to_state(operator, {"basis": basis_k, "data": data})
@@ -806,7 +854,7 @@ def _get_coherent_state_generator(
     k_0: tuple[float, ...],
     sigma_0: tuple[float, ...],
 ) -> SingleBasisOperator[_SBV0]:
-    basis_x = stacked_basis_as_fundamental_position_basis(basis)
+    basis_x = tuple_basis_as_fundamental(basis)
 
     # x - x' - x_0
     displacements = get_displacements_matrix_x_stacked(basis, x_0)
@@ -840,10 +888,10 @@ def get_coherent_state(
     x_0: tuple[float,],
     k_0: tuple[float,],
     sigma_0: tuple[float,],
-) -> StateVector[_SBV0]:
+) -> LegacyStateVector[_SBV0]:
     operator = _get_coherent_state_generator(basis, x_0, k_0, sigma_0)
 
-    basis_k = stacked_basis_as_fundamental_position_basis(basis)
+    basis_k = tuple_basis_as_fundamental(basis)
     data = np.zeros(basis_k.n, dtype=np.complex128)
     data[0] = 1
     return apply_operator_to_state(operator, {"basis": basis_k, "data": data})
@@ -855,7 +903,7 @@ def _get_coherent_states(
     x_0: tuple[np.ndarray[Any, np.dtype[np.float64]],],
     k_0: tuple[np.ndarray[Any, np.dtype[np.float64]],],
     sigma_0: tuple[np.ndarray[Any, np.dtype[np.float64]],],
-) -> StateVectorList[
+) -> LegacyStateVectorList[
     FundamentalBasis[int],
     TupleBasisWithLengthLike[TransformedPositionBasis[int, int, Literal[1]]],
 ]:
@@ -868,14 +916,14 @@ def _get_coherent_states(
     )
 
 
-_B0 = TypeVar("_B0", bound=BasisLike[Any, Any])
+_B0 = TypeVar("_B0", bound=BasisLike)
 
 
 def _get_boltzmann_state_from_hamiltonian(
     hamiltonian: SingleBasisDiagonalOperator[_B0],
     temperature: float,
     phase: np.ndarray[tuple[int], np.dtype[np.float64]],
-) -> StateVector[_B0]:
+) -> LegacyStateVector[_B0]:
     boltzmann_distribution = np.exp(
         -hamiltonian["data"] / (2 * Boltzmann * temperature),
     )
@@ -887,7 +935,7 @@ def _get_boltzmann_state_from_hamiltonian(
 def get_random_boltzmann_state(
     system: PeriodicSystem,
     config: PeriodicSystemConfig,
-) -> StateVector[ExplicitStackedBasisWithLength[Any, Any]]:
+) -> LegacyStateVector[ExplicitStackedBasisWithLength]:
     """Generate a random Boltzmann state.
 
     Follows the formula described in eqn 5 in
@@ -921,7 +969,7 @@ def _get_coherent_thermal_state(
     x_0: tuple[float,],
     k_0: tuple[float,],
     sigma_0: tuple[float,],
-) -> StateVector[
+) -> LegacyStateVector[
     TupleBasisWithLengthLike[TransformedPositionBasis[int, int, Literal[1]]]
 ]:
     basis = get_basis(system, config)
@@ -937,7 +985,7 @@ def _get_coherent_thermal_states(
     x_0: tuple[np.ndarray[Any, np.dtype[np.float64]],],
     k_0: tuple[np.ndarray[Any, np.dtype[np.float64]],],
     sigma_0: tuple[np.ndarray[Any, np.dtype[np.float64]],],
-) -> StateVectorList[
+) -> LegacyStateVectorList[
     FundamentalBasis[int],
     TupleBasisWithLengthLike[TransformedPositionBasis[int, int, Literal[1]]],
 ]:
@@ -1010,26 +1058,37 @@ def plot_rate_against_potential(
     config: PeriodicSystemConfig,
     simulation_config: PeriodicSimulationConfig,
     energies: np.ndarray[Any, np.dtype[np.float64]],
+    *,
+    labels: list[str] | None = None,
 ) -> None:
     fig, ax = get_figure(None)
     fig1, ax1 = get_figure(None)
+    fig2, ax2 = get_figure(None)
+    scattered_k = 2 * np.pi / 20
 
-    for energy in energies:
+    for label, energy in zip(labels or [str(x) for x in energies], energies):
         modified_system = system.with_barrier_energy(energy)
 
         states = get_stochastic_evolution(modified_system, config, simulation_config)
 
-        _, _, _ = plot_average_displacement_1d_x(states, ax=ax)
+        _, _, line = plot_average_displacement_1d_x(states, ax=ax)
+        line.set_label(label)
 
-        classical_positions = get_langevin_evolution(
-            system,
-            config,
-            simulation_config,
-        )
-        plot_average_value_list_against_time(
-            get_average_displacements(classical_positions),
-            ax=ax1,
-        )
+        _, _, line = plot_average_drift_1d_x(states, ax=ax1)
+        line.set_label(label)
+
+        _, _, line = plot_average_isf_1d_x(states, scattered_k, ax=ax2)
+        line.set_label(label)
+
+        # classical_positions = get_langevin_evolution(
+        #     system,
+        #     config,
+        #     simulation_config,
+        # )
+        # plot_average_value_list_against_time(
+        #     get_average_displacements(classical_positions),
+        #     ax=ax1,
+        # )
 
     states = get_stochastic_evolution(system, config, simulation_config)
     _, _, line1 = plot_free_displacement_rate(
@@ -1039,15 +1098,26 @@ def plot_rate_against_potential(
         ax=ax,
     )
     line1.set_color("black")
+    line1.set_linestyle("--")
     fig.show()
-
-    _, _, line1 = plot_free_displacement_rate(
-        system,
-        config,
-        states["basis"][0][1],
-        ax=ax1,
+    ax.legend()
+    ax.set_xlim(0, 0.25 * states["basis"][0][1].delta_t)
+    ax.set_ylim(
+        0,
+        1.2
+        * get_free_displacement_rate(system, config)
+        * 0.25
+        * states["basis"][0][1].delta_t,
     )
-    line1.set_color("black")
-    ax1.set_title("langevin")  # type: ignore lib
+
+    # fig2, _, line1 = plot_free_drift_rate(
+    #     system,
+    #     states["basis"][0][1],
+    #     # ax=ax,
+    # )
+    # line1.set_color("black")
+    # ax1.set_title("langevin")  # type: ignore lib
     fig1.show()
+    fig2.show()
+
     input()
