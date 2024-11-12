@@ -1,5 +1,8 @@
+from typing import cast
+
 import matplotlib.animation
-from scipy.constants import Boltzmann
+from matplotlib.axes import Axes
+from scipy.constants import Boltzmann  # type: ignore unknown
 from surface_potential_analysis.potential.plot import plot_potential_1d_x
 from surface_potential_analysis.state_vector.eigenstate_calculation import (
     calculate_eigenvectors_hermitian,
@@ -42,7 +45,7 @@ def plot_system_eigenstates() -> None:
     hamiltonian = get_hamiltonian(100)
     eigenstates = calculate_eigenvectors_hermitian(hamiltonian)
 
-    ax1 = ax.twinx()
+    ax1 = cast(Axes, ax.twinx())
     for _i, state in enumerate(state_vector_list_into_iter(eigenstates)):
         plot_state_1d_x(state, ax=ax1)
 
@@ -57,7 +60,7 @@ def plot_coherent_evolution() -> None:
 
     states = get_coherent_evolution()
 
-    ax1 = ax.twinx()
+    ax1 = cast(Axes, ax.twinx())
     for state in state_vector_list_into_iter(states):
         plot_state_1d_x(state, ax=ax1)
     fig.show()
@@ -76,7 +79,7 @@ def plot_coherent_evolution_decomposition() -> None:
 
     states = get_coherent_evolution_decomposition()
 
-    ax1 = ax.twinx()
+    ax1 = cast(Axes, ax.twinx())
     for state in state_vector_list_into_iter(states):
         plot_state_1d_x(state, ax=ax1)
     fig.show()
@@ -93,7 +96,7 @@ def plot_stochastic_evolution() -> None:
 
     states = get_stochastic_evolution()
 
-    ax1 = ax.twinx()
+    ax1 = cast(Axes, ax.twinx())
     for state in state_vector_list_into_iter(states):
         plot_state_1d_x(state, ax=ax1)
     fig.show()
@@ -121,7 +124,7 @@ def plot_stochastic_occupation() -> None:
         line.set_linestyle("--")
         line.set_label("Expected")
 
-        ax.legend([line], ["Expected occupation"])
+        ax.legend([line], ["Expected occupation"])  # type: ignore unknown
 
     fig0.show()
     fig1.show()

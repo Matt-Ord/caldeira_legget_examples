@@ -7,7 +7,7 @@
 	"features": {
 		"ghcr.io/devcontainers/features/python:1": {
 			"installTools": true,
-			"version": "3.11"
+			"version": "3.13"
 		},
 		"ghcr.io/devcontainers-contrib/features/poetry:2": {
 			"version": "latest"
@@ -42,10 +42,12 @@
 					"examples",
 					"tests",
 					"lib/surface_potential_analysis/surface_potential_analysis",
-					"lib/surface_potential_analysis/lib/sse_solver/sse_solver_py/sse_solver_py"
+					"lib/surface_potential_analysis/lib/sse_solver/sse_solver_py/sse_solver_py",
+					"lib/surface_potential_analysis/lib/slate/slate"
 				],
 				"python.analysis.extraPaths": [
 					"lib/surface_potential_analysis",
+					"lib/surface_potential_analysis/lib/slate",
 					"lib/surface_potential_analysis/lib/sse_solver/sse_solver_py"
 				],
 				"python.analysis.autoImportCompletions": true,
@@ -91,7 +93,8 @@
 				"streetsidesoftware.code-spell-checker",
 				"tamasfe.even-better-toml",
 				"charliermarsh.ruff",
-				"ms-python.vscode-pylance"
+				"ms-python.vscode-pylance",
+				"GitHub.copilot"
 			]
 		}
 	},

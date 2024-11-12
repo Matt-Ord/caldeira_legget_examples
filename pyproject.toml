@@ -7,8 +7,9 @@ readme = "README.md"
 packages = [{ include = "caldeira_legget_examples" }]
 
 [tool.poetry.dependencies]
-python = ">=3.11,<3.13"
+python = ">=3.13,<3.14"
 surface-potential-analysis = { path = "lib/surface_potential_analysis", develop = true }
+sdeint = "^0.3.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.2.2"
@@ -20,7 +21,7 @@ preview = true
 
 [tool.ruff.lint]
 select = ["ALL"]
-ignore = ["D103", "D104", "D100", "D417", "TD003", "TD002", "CPY001"]
+ignore = ["D100", "D103", "D104", "D105", "D417", "TD003", "TD002", "CPY001"]
 unfixable = ["ERA001", "T201"]
 
 [tool.ruff.lint.extend-per-file-ignores]
